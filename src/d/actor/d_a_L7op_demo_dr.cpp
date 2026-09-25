@@ -6,12 +6,75 @@
 #include "d/dolzel_rel.h" // IWYU pragma: keep
 
 #include "d/actor/d_a_L7op_demo_dr.h"
+#if TARGET_PC  // additional actor attribute integration
+#include "dusk/mods/svc/actor_attribute_helpers.hpp"
+#endif
 #include "d/actor/d_a_player.h"
 #include "d/d_com_inf_game.h"
 #include "d/d_s_play.h"
 #include "d/actor/d_a_npc4.h"
 #include "f_op/f_op_camera_mng.h"
 #include "f_op/f_op_msg_mng.h"
+#if TARGET_PC  // enemy attribute integration
+
+namespace actor_attr = dusk::mods::svc::actor_attr;
+
+namespace dusk::mods::svc::actor_attr {
+
+/* The opening dragon is a temporary child of the real Argorok actor. */
+template <>
+struct EnemyAttributeOwner<daL7ODR_c> {
+    static fopAc_ac_c* get(daL7ODR_c* i_this) {
+
+        fopAc_ac_c* parent = fopAcM_SearchByID(i_this->parentActorID);
+        if (parent != NULL && fopAcM_GetName(parent) == fpcNm_B_DR_e) {
+            return parent;
+        }
+
+        return i_this;
+
+}
+};
+
+}  // namespace dusk::mods::svc::actor_attr
+
+/* Preserve the demo's one-frame timer milestone while advancing byte timers
+   on the boss action clock.  This avoids u8 overflow at very slow speeds. */
+static void l7_tick_demo_timer(u8& i_timer, int i_ticks) {
+
+    if (i_timer == 0 || i_ticks <= 0) {
+        return;
+    }
+
+    if (i_timer == 1) {
+        i_timer = 0;
+    } else if (i_ticks >= i_timer) {
+        i_timer = 1;
+    } else {
+        i_timer -= i_ticks;
+    }
+}
+
+/* field_0x8b7 bit 0 is the vanilla "intro BGM started" flag.  Bit 1 is free
+ * and remembers that a fast dragon crossed the scripted release half-plane
+ * while the independent 10-frame release timer was still running. */
+static constexpr u8 L7_FLY_RELEASE_SIDE_SEEN = 1 << 1;
+
+static void l7_record_fly_release_crossing(daL7ODR_c* i_this, const cXyz& i_orbitCenter, const u16 i_tangentBeforeMove) {
+
+    if (actor_attr::enemy_action_time_speed(i_this) == 1.0f) {
+        return;
+    }
+
+    const u16 tangentAfterMove = static_cast<u16>(cLib_targetAngleY(&i_this->current.pos, &i_orbitCenter) + 0x4000);
+    if (i_tangentBeforeMove < 0x8000 || tangentAfterMove < 0x8000) {
+        if ((i_this->field_0x8b7 & L7_FLY_RELEASE_SIDE_SEEN) == 0) {
+            OS_REPORT("[Dusklight randomizer] L7ODR latched orbit release side " "(timer %u, pre %04x, post %04x)\n", static_cast<unsigned>(i_this->field_0x8b5), static_cast<unsigned>(i_tangentBeforeMove), static_cast<unsigned>(tangentAfterMove));
+        }
+        i_this->field_0x8b7 |= L7_FLY_RELEASE_SIDE_SEEN;
+    }
+}
+#endif
 
 void daL7ODR_c::setAction(daL7ODR_c::actionFn i_action) {
     if (mAction != NULL) {
@@ -53,7 +116,11 @@ void daL7ODR_c::mtx_set() {
     mDoMtx_stack_c::transS(current.pos);
     mDoMtx_stack_c::ZXYrotM(current.angle);
 
+#if TARGET_PC  // enemy attribute integration
+    model->setBaseScale(actor_attr::enemy_size_multiplier(this, 1.0f));
+#else
     model->setBaseScale(scale);
+#endif
     model->setBaseTRMtx(mDoMtx_stack_c::get());
 
     mpModelMorf->modelCalc();
@@ -72,8 +139,14 @@ int daL7ODR_c::draw() {
     mpModelMorf->entryDL();
     
     cXyz sp8;
+#if TARGET_PC  // enemy attribute integration
+    const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(this);
+    sp8.set(current.pos.x, 10.0f * sizeMultiplier + current.pos.y, current.pos.z);
+    mShadowKey = dComIfGd_setShadow(mShadowKey, 0, model, &sp8, (6000.0f + BREG_F(19)) * sizeMultiplier, 0.0f, current.pos.y, mAcch.GetGroundH(), mAcch.m_gnd, &tevStr, 0, 1.0f, dDlst_shadowControl_c::getSimpleTex());
+#else
     sp8.set(current.pos.x, 10.0f + current.pos.y, current.pos.z);
     mShadowKey = dComIfGd_setShadow(mShadowKey, 0, model, &sp8, 6000.0f + BREG_F(19), 0.0f, current.pos.y, mAcch.GetGroundH(), mAcch.m_gnd, &tevStr, 0, 1.0f, dDlst_shadowControl_c::getSimpleTex());
+#endif
     return 1;
 }
 
@@ -155,9 +228,17 @@ void daL7ODR_c::pl_walk() {
         } else if (field_0x888 == 2) {
             if (field_0x8b5 != 0) {
                 if (field_0x8b5 <= 10) {
+#if TARGET_PC  // enemy attribute integration
+                    actor_attr::enemy_chase_action_float(this, &field_0x898, 0.0f, 0.2f);
+#else
                     cLib_chaseF(&field_0x898, 0.0f, 0.2f);
+#endif
                 }
+#if TARGET_PC  // enemy attribute integration
+                mDemoCamCenter.y += actor_attr::enemy_action_step(this, field_0x898);
+#else
                 mDemoCamCenter.y += field_0x898;
+#endif
                 camera->mCamera.Set(mDemoCamCenter, mDemoCamEye, 64.0f, 0);
             } else {
                 field_0x8b5 = 60;
@@ -222,7 +303,11 @@ void daL7ODR_c::pl_walk() {
         } else if (field_0x8b6 == 0) {
             cXyz player_pos(player->current.pos);
             if (player_pos.x) {
+#if TARGET_PC  // enemy attribute integration
+                actor_attr::enemy_chase_action_float(this, &player_pos.x, 0.0f, 1.0f);
+#else
                 cLib_chaseF(&player_pos.x, 0.0f, 1.0f);
+#endif
                 player->setPlayerPosAndAngle(&player_pos, -0x8000, 0);
                 player->changeDemoMoveAngle(-0x8000);
                 player->changeDemoPos0(&player_pos);
@@ -253,7 +338,11 @@ void daL7ODR_c::dr_wait() {
         current.pos.set(5000.0f * cM_ssin(angle), 7000.0f, 5000.0f * cM_scos(angle));
         current.angle.y = cLib_targetAngleY(&current.pos, &sp8) + 0x4000;
 
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_set_animation(this, mpModelMorf, (J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x2F), 2, 3.0f, 1.0f, 0.0f, -1.0f);
+#else
         mpModelMorf->setAnm((J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x2F), 2, 3.0f, 1.0f, 0.0f, -1.0f);
+#endif
         field_0x890 = 0x2F;
         mpModelMorf->setFrame(20.0f);
         mpModelMorf->setPlaySpeed(0.0f);
@@ -274,7 +363,11 @@ void daL7ODR_c::dr_fly() {
 
     if (field_0x88c == 0) {
         field_0x8b4 = 0;
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_set_animation_play_speed(this, mpModelMorf, 1.0f);
+#else
         mpModelMorf->setPlaySpeed(1.0f);
+#endif
 
         field_0x898 = 600.0f;
         mDemoCamCenter = player->current.pos;
@@ -293,11 +386,19 @@ void daL7ODR_c::dr_fly() {
         field_0x88c++;
     } else if (field_0x88c != -1) {
         if (field_0x88c == 1) {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_angle(this, &current.angle.x, 0x800, 0x10);
+#else
             cLib_chaseAngleS(&current.angle.x, 0x800, 0x10);
+#endif
             current.angle.y = cLib_targetAngleY(&current.pos, &sp264) + 0x4000;
             speed.y = -speedF * cM_ssin(current.angle.x);
             mAcch.CrrPos(dComIfG_Bgsp());
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_action_pos_move_f(this, NULL);
+#else
             fopAcM_posMoveF(this, NULL);
+#endif
 
             mDemoCamCenter = player->current.pos;
             mDemoCamCenter.y += 160.0f;
@@ -310,7 +411,11 @@ void daL7ODR_c::dr_fly() {
             setZoomOutCamPos(mDemoCamEye, mDemoCamCenter, field_0x898);
             camera->mCamera.Set(mDemoCamCenter, mDemoCamEye);
 
+#if TARGET_PC  // enemy attribute integration
+            if (mpModelMorf->checkFrame(8.0f)) {
+#else
             if (8.0f == mpModelMorf->getFrame()) {
+#endif
                 mSound.startCreatureSound(Z2SE_EN_DR_WING, 0, -1);
             }
 
@@ -319,11 +424,19 @@ void daL7ODR_c::dr_fly() {
                 field_0x88c++;
             }
         } else if (field_0x88c == 2) {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_angle(this, &current.angle.x, 0x800, 0x10);
+#else
             cLib_chaseAngleS(&current.angle.x, 0x800, 0x10);
+#endif
             current.angle.y = cLib_targetAngleY(&current.pos, &sp264) + 0x4000;
             speed.y = -speedF * cM_ssin(current.angle.x);
             mAcch.CrrPos(dComIfG_Bgsp());
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_action_pos_move_f(this, NULL);
+#else
             fopAcM_posMoveF(this, NULL);
+#endif
 
             mDemoCamCenter = player->current.pos;
             mDemoCamCenter.y += 160.0f;
@@ -334,12 +447,21 @@ void daL7ODR_c::dr_fly() {
             mDemoCamEye.y += 400.0f;
 
             f32 temp_f30 = mDemoCamCenter.abs(mDemoCamEye) - 1800.0f;
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &field_0x89c, 140.0f, 2.0f);
+            actor_attr::enemy_chase_action_float(this, &field_0x898, temp_f30, field_0x89c);
+#else
             cLib_chaseF(&field_0x89c, 140.0f, 2.0f);
             cLib_chaseF(&field_0x898, temp_f30, field_0x89c);
+#endif
             setZoomOutCamPos(mDemoCamEye, mDemoCamCenter, field_0x898);
             camera->mCamera.Set(mDemoCamCenter, mDemoCamEye);
 
+#if TARGET_PC  // enemy attribute integration
+            if (mpModelMorf->checkFrame(8.0f)) {
+#else
             if (8.0f == mpModelMorf->getFrame()) {
+#endif
                 mSound.startCreatureSound(Z2SE_EN_DR_WING, 0, -1);
             }
 
@@ -351,11 +473,19 @@ void daL7ODR_c::dr_fly() {
             field_0x88c++;
         } else if (field_0x88c == 3) {
             cXyz sp258;
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_angle(this, &current.angle.x, 0x800, 0x10);
+#else
             cLib_chaseAngleS(&current.angle.x, 0x800, 0x10);
+#endif
             current.angle.y = cLib_targetAngleY(&current.pos, &sp264) + 0x4000;
             speed.y = -speedF * cM_ssin(current.angle.x);
             mAcch.CrrPos(dComIfG_Bgsp());
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_action_pos_move_f(this, NULL);
+#else
             fopAcM_posMoveF(this, NULL);
+#endif
 
             sp258 = player->current.pos;
             sp258.y += 160.0f;
@@ -366,13 +496,26 @@ void daL7ODR_c::dr_fly() {
             mDoMtx_stack_c::multVecZero(&mDemoCamEye);
             mDemoCamEye.y += 400.0f;
 
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &field_0x89c, 0.0f, 4.0f);
+            field_0x898 += actor_attr::enemy_action_step(this, field_0x89c);
+#else
             cLib_chaseF(&field_0x89c, 0.0f, 4.0f);
             field_0x898 += field_0x89c;
+#endif
             setZoomOutCamPos(mDemoCamEye, sp258, field_0x898);
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_pos(this, &mDemoCamCenter, field_0x830, 100.0f);
+#else
             cLib_chasePos(&mDemoCamCenter, field_0x830, 100.0f);
+#endif
             camera->mCamera.Set(mDemoCamCenter, mDemoCamEye);
 
+#if TARGET_PC  // enemy attribute integration
+            if (mpModelMorf->checkFrame(8.0f)) {
+#else
             if (8.0f == mpModelMorf->getFrame()) {
+#endif
                 mSound.startCreatureSound(Z2SE_EN_DR_WING, 0, -1);
             }
 
@@ -384,16 +527,34 @@ void daL7ODR_c::dr_fly() {
                 field_0x88c++;
             }
         } else if (field_0x88c == 4) {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_angle(this, &current.angle.x, 0x800, 0x10);
+#else
             cLib_chaseAngleS(&current.angle.x, 0x800, 0x10);
+#endif
             current.angle.y = cLib_targetAngleY(&current.pos, &sp264) + 0x4000;
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &speedF, 80.0f, 0.5f);
+#else
             cLib_chaseF(&speedF, 80.0f, 0.5f);
+#endif
             speed.y = -speedF * cM_ssin(current.angle.x);
             mAcch.CrrPos(dComIfG_Bgsp());
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_action_pos_move_f(this, NULL);
+#else
             fopAcM_posMoveF(this, NULL);
+#endif
 
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_pos(this, &mDemoCamCenter, field_0x830, 100.0f);
+            actor_attr::enemy_chase_action_float(this, &field_0x8a0, 100.0f, 0.5f);
+            actor_attr::enemy_chase_action_float(this, &field_0x89c, -1400.0f, field_0x8a0);
+#else
             cLib_chasePos(&mDemoCamCenter, field_0x830, 100.0f);
             cLib_chaseF(&field_0x8a0, 100.0f, 0.5f);
             cLib_chaseF(&field_0x89c, -1400.0f, field_0x8a0);
+#endif
 
             cXyz sp24C;
             mDoMtx_stack_c::transS(current.pos);
@@ -402,11 +563,20 @@ void daL7ODR_c::dr_fly() {
             mDoMtx_stack_c::multVecZero(&sp24C);
             sp24C.y += 400.0f;
 
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &field_0x898, 100.0f, 1.0f);
+            actor_attr::enemy_chase_action_pos(this, &mDemoCamEye, sp24C, field_0x898);
+#else
             cLib_chaseF(&field_0x898, 100.0f, 1.0f);
             cLib_chasePos(&mDemoCamEye, sp24C, field_0x898);
+#endif
             camera->mCamera.Set(mDemoCamCenter, mDemoCamEye);
 
+#if TARGET_PC  // enemy attribute integration
+            if (mpModelMorf->checkFrame(8.0f)) {
+#else
             if (8.0f == mpModelMorf->getFrame()) {
+#endif
                 mSound.startCreatureSound(Z2SE_EN_DR_WING, 0, -1);
             }
 
@@ -414,15 +584,30 @@ void daL7ODR_c::dr_fly() {
                 field_0x88c++;
             }
         } else if (field_0x88c == 5) {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_angle(this, &current.angle.x, 0x800, 0x10);
+            actor_attr::enemy_chase_action_angle(this, &current.angle.y, 0, 0x80);
+            actor_attr::enemy_chase_action_float(this, &speedF, 80.0f, 0.5f);
+#else
             cLib_chaseAngleS(&current.angle.x, 0x800, 0x10);
             cLib_chaseAngleS(&current.angle.y, 0, 0x80);
             cLib_chaseF(&speedF, 80.0f, 0.5f);
+#endif
             mAcch.CrrPos(dComIfG_Bgsp());
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_action_pos_move_f(this, NULL);
+#else
             fopAcM_posMoveF(this, NULL);
+#endif
 
             mDemoCamCenter = field_0x830;
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &field_0x8a0, 100.0f, 0.5f);
+            actor_attr::enemy_chase_action_float(this, &field_0x89c, -1400.0f, field_0x8a0);
+#else
             cLib_chaseF(&field_0x8a0, 100.0f, 0.5f);
             cLib_chaseF(&field_0x89c, -1400.0f, field_0x8a0);
+#endif
 
             cXyz sp240;
             mDoMtx_stack_c::transS(current.pos);
@@ -431,29 +616,55 @@ void daL7ODR_c::dr_fly() {
             mDoMtx_stack_c::multVecZero(&sp240);
             sp240.y += 400.0f;
 
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &field_0x898, 100.0f, 1.0f);
+            actor_attr::enemy_chase_action_pos(this, &mDemoCamEye, sp240, field_0x898);
+#else
             cLib_chaseF(&field_0x898, 100.0f, 1.0f);
             cLib_chasePos(&mDemoCamEye, sp240, field_0x898);
+#endif
             camera->mCamera.Set(mDemoCamCenter, mDemoCamEye);
 
+#if TARGET_PC  // enemy attribute integration
+            if (mpModelMorf->checkFrame(8.0f)) {
+#else
             if (8.0f == mpModelMorf->getFrame()) {
+#endif
                 mSound.startCreatureSound(Z2SE_EN_DR_WING, 0, -1);
             }
 
             if (mpModelMorf->getFrame() >= 33.0f) {
+#if TARGET_PC  // enemy attribute integration
+                actor_attr::enemy_set_animation(this, mpModelMorf, (J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x30), 0, 3.0f, 1.0f, 0.0f, -1.0f);
+#else
                 mpModelMorf->setAnm((J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x30), 0, 3.0f, 1.0f, 0.0f, -1.0f);
+#endif
                 field_0x890 = 0x30;
                 current.angle.y = 0;
                 field_0x88c++;
             }
         } else if (field_0x88c == 6) {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_angle(this, &current.angle.x, 0, 0x20);
+#else
             cLib_chaseAngleS(&current.angle.x, 0, 0x20);
+#endif
             speed.y = -speedF * cM_ssin(current.angle.x);
             mAcch.CrrPos(dComIfG_Bgsp());
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_action_pos_move_f(this, NULL);
+#else
             fopAcM_posMoveF(this, NULL);
+#endif
 
             mDemoCamCenter = field_0x830;
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &field_0x8a0, 100.0f, 0.5f);
+            actor_attr::enemy_chase_action_float(this, &field_0x89c, -1400.0f, field_0x8a0);
+#else
             cLib_chaseF(&field_0x8a0, 100.0f, 0.5f);
             cLib_chaseF(&field_0x89c, -1400.0f, field_0x8a0);
+#endif
 
             cXyz sp234;
             mDoMtx_stack_c::transS(current.pos);
@@ -462,15 +673,28 @@ void daL7ODR_c::dr_fly() {
             mDoMtx_stack_c::multVecZero(&sp234);
             sp234.y += 400.0f;
 
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &field_0x898, 100.0f, 1.0f);
+            actor_attr::enemy_chase_action_pos(this, &mDemoCamEye, sp234, field_0x898);
+#else
             cLib_chaseF(&field_0x898, 100.0f, 1.0f);
             cLib_chasePos(&mDemoCamEye, sp234, field_0x898);
+#endif
             camera->mCamera.Set(mDemoCamCenter, mDemoCamEye);
 
             if (field_0x890 == 0x30) {
                 if (mpModelMorf->isStop()) {
+#if TARGET_PC  // enemy attribute integration
+                    actor_attr::enemy_set_animation(this, mpModelMorf, (J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x31), 2, 3.0f, 1.0f, 0.0f, -1.0f);
+#else
                     mpModelMorf->setAnm((J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x31), 2, 3.0f, 1.0f, 0.0f, -1.0f);
+#endif
                     field_0x890 = 0x31;
+#if TARGET_PC  // enemy attribute integration
+                } else if (mpModelMorf->checkFrame(8.0f)) {
+#else
                 } else if (8.0f == mpModelMorf->getFrame()) {
+#endif
                     mSound.startCreatureSound(Z2SE_EN_DR_WING, 0, -1);
                 }
             } else if (field_0x890 == 0x31) {
@@ -479,37 +703,72 @@ void daL7ODR_c::dr_fly() {
 
             if (current.pos.z >= 3000.0f) {
                 field_0x8b5 = 10;
+#if TARGET_PC  // enemy attribute integration
+                field_0x8b7 &= ~L7_FLY_RELEASE_SIDE_SEEN;
+#endif
                 field_0x88c++;
             }
         } else if (field_0x88c == 7) {
             cXyz sp228(2674.0f, 0.0f, 3038.0f);
+#if TARGET_PC  // enemy attribute integration
+            const cXyz flyWaypoint(sp228);
+#endif
 
             if (field_0x890 == 0x30) {
                 if (mpModelMorf->isStop()) {
+#if TARGET_PC  // enemy attribute integration
+                    actor_attr::enemy_set_animation(this, mpModelMorf, (J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x31), 2, 3.0f, 1.0f, 0.0f, -1.0f);
+#else
                     mpModelMorf->setAnm((J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x31), 2, 3.0f, 1.0f, 0.0f, -1.0f);
+#endif
                     field_0x890 = 0x31;
+#if TARGET_PC  // enemy attribute integration
+                } else if (mpModelMorf->checkFrame(8.0f)) {
+#else
                 } else if (8.0f == mpModelMorf->getFrame()) {
+#endif
                     mSound.startCreatureSound(Z2SE_EN_DR_WING, 0, -1);
                 }
             } else if (field_0x890 == 0x31) {
                 mSound.startCreatureSoundLevel(Z2SE_EN_DR_GLIDE, 0, -1);
             }
 
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_angle(this, &current.angle.x, 0x800, 0x10);
+#else
             cLib_chaseAngleS(&current.angle.x, 0x800, 0x10);
+#endif
             sp228 += current.pos;
             sp228 /= 2.0f;
 
             if ((u16)current.angle.y > 0xE000) {
+#if TARGET_PC  // enemy attribute integration
+                actor_attr::enemy_add_action_angle(this, &current.angle.z, 0x2000, 30, 0x800, 0x40);
+#else
                 cLib_addCalcAngleS(&current.angle.z, 0x2000, 30, 0x800, 0x40);
+#endif
             } else {
+#if TARGET_PC  // enemy attribute integration
+                actor_attr::enemy_add_action_angle(this, &current.angle.z, 0, 60, 0x800, 0x40);
+                actor_attr::enemy_chase_action_float(this, &speedF, 240.0f, 1.0f);
+#else
                 cLib_addCalcAngleS(&current.angle.z, 0, 60, 0x800, 0x40);
                 cLib_chaseF(&speedF, 240.0f, 1.0f);
+#endif
             }
 
             current.angle.y = cLib_targetAngleY(&current.pos, &sp228) + 0x4000;
+#if TARGET_PC  // enemy attribute integration
+            const u16 tangentBeforeMove = static_cast<u16>(current.angle.y);
+#endif
             speed.y = -speedF * cM_ssin(current.angle.x);
             mAcch.CrrPos(dComIfG_Bgsp());
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_action_pos_move_f(this, NULL);
+            l7_record_fly_release_crossing(this, flyWaypoint, tangentBeforeMove);
+#else
             fopAcM_posMoveF(this, NULL);
+#endif
             mDemoCamCenter = field_0x830;
 
             cXyz sp21C;
@@ -519,11 +778,20 @@ void daL7ODR_c::dr_fly() {
             mDoMtx_stack_c::multVecZero(&sp21C);
             sp21C.y += 400.0f;
 
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_pos(this, &mDemoCamEye, sp21C, 90.0f);
+#else
             cLib_chasePos(&mDemoCamEye, sp21C, 90.0f);
+#endif
             camera->mCamera.Set(mDemoCamCenter, mDemoCamEye);
             mSound.startCreatureSoundLevel(Z2SE_EN_DR_GLIDE, 0, -1);
 
+#if TARGET_PC  // enemy attribute integration
+            if (field_0x8b5 == 0 && ((u16)current.angle.y < 0x8000 || (field_0x8b7 & L7_FLY_RELEASE_SIDE_SEEN) != 0)) {
+                OS_REPORT("[Dusklight randomizer] L7ODR advancing after orbit " "release (yaw %04x, latch %u)\n", static_cast<unsigned>(static_cast<u16>(current.angle.y)), static_cast<unsigned>((field_0x8b7 & L7_FLY_RELEASE_SIDE_SEEN) != 0));
+#else
             if (field_0x8b5 == 0 && (u16)current.angle.y < 0x8000) {
+#endif
                 cXyz sp210;
                 current.angle.y = -0x8000;
                 field_0x8b4 = 1;
@@ -544,20 +812,37 @@ void daL7ODR_c::dr_fly() {
         } else if (field_0x88c == 8) {
             cXyz sp204(0.0f, 220.0f, 1200.0f);
             if (mDemoCamEye.z > 1800.0f) {
+#if TARGET_PC  // enemy attribute integration
+                actor_attr::enemy_chase_action_float(this, &field_0x898, 80.0f, 2.0f);
+#else
                 cLib_chaseF(&field_0x898, 80.0f, 2.0f);
+#endif
             } else {
+#if TARGET_PC  // enemy attribute integration
+                actor_attr::enemy_chase_action_float(this, &field_0x898, 0.0f, 4.5f);
+#else
                 cLib_chaseF(&field_0x898, 0.0f, 4.5f);
+#endif
             }
 
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_pos(this, &mDemoCamEye, sp204, field_0x898);
+            mDemoCamCenter.z -= actor_attr::enemy_action_step(this, 85.0f);
+#else
             cLib_chasePos(&mDemoCamEye, sp204, field_0x898);
             mDemoCamCenter.z -= 85.0f;
+#endif
             camera->mCamera.Set(mDemoCamCenter, mDemoCamEye);
             mSound.startCreatureSoundLevel(Z2SE_EN_DR_GLIDE, 0, -1);
 
             if (mDemoCamEye.z <= sp204.z && !field_0x898) {
                 cXyz sp1F8;
                 field_0x8b4 = 0;
+#if TARGET_PC  // enemy attribute integration
+                actor_attr::enemy_set_animation_play_speed(this, mpModelMorf, 1.0f);
+#else
                 mpModelMorf->setPlaySpeed(1.0f);
+#endif
                 field_0x8b5 = 0;
 
                 sp1F8.set(0.0f, 0.0f, 1400.0f);
@@ -573,14 +858,26 @@ void daL7ODR_c::dr_fly() {
             }
         } else if (field_0x88c == 9) {
             if (field_0x8b5 == 0) {
+#if TARGET_PC  // enemy attribute integration
+                actor_attr::enemy_set_animation_play_speed(this, mpModelMorf, 1.0f);
+                actor_attr::enemy_add_action_angle(this, &current.angle.z, 0, 0x20, 0x800, 0x40);
+                actor_attr::enemy_chase_action_float(this, &field_0x898, 128.0f, 4.0f);
+                actor_attr::enemy_chase_action_angle(this, &current.angle.x, 0x200, field_0x898);
+                actor_attr::enemy_chase_action_float(this, &speedF, 240.0f, 1.0f);
+#else
                 mpModelMorf->setPlaySpeed(1.0f);
                 cLib_addCalcAngleS(&current.angle.z, 0, 0x20, 0x800, 0x40);
                 cLib_chaseF(&field_0x898, 128.0f, 4.0f);
                 cLib_chaseAngleS(&current.angle.x, 0x200, field_0x898);
                 cLib_chaseF(&speedF, 240.0f, 1.0f);
+#endif
                 speed.y = -speedF * cM_ssin(current.angle.x);
                 mAcch.CrrPos(dComIfG_Bgsp());
+#if TARGET_PC  // enemy attribute integration
+                actor_attr::enemy_action_pos_move_f(this, NULL);
+#else
                 fopAcM_posMoveF(this, NULL);
+#endif
             }
 
             mDemoCamCenter.set(0.0f, -140.0f, -930.0f);
@@ -589,25 +886,44 @@ void daL7ODR_c::dr_fly() {
             mSound.startCreatureSoundLevel(Z2SE_EN_DR_GLIDE, 0, -1);
 
             if (1000.0f > current.pos.z) {
+#if TARGET_PC  // enemy attribute integration
+                actor_attr::enemy_set_animation(this, mpModelMorf, (J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x45), 0, 20.0f, 1.0f, 0.0f, -1.0f);
+#else
                 mpModelMorf->setAnm((J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x45), 0, 20.0f, 1.0f, 0.0f, -1.0f);
+#endif
                 field_0x890 = 0x45;
                 field_0x898 = 0.0f;
                 field_0x89c = 0.0f;
                 field_0x88c++;
             }
         } else if (field_0x88c == 10) {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &field_0x898, 3072.0f, 96.0f);
+            actor_attr::enemy_chase_action_angle(this, &current.angle.x, -0x4000, field_0x898);
+            actor_attr::enemy_chase_action_float(this, &field_0x89c, 8.0f, 0.3f);
+            actor_attr::enemy_chase_action_float(this, &speedF, 0.0f, field_0x89c);
+#else
             cLib_chaseF(&field_0x898, 3072.0f, 96.0f);
             cLib_chaseAngleS(&current.angle.x, -0x4000, field_0x898);
             cLib_chaseF(&field_0x89c, 8.0f, 0.3f);
             cLib_chaseF(&speedF, 0.0f, field_0x89c);
+#endif
             speed.y = -speedF * cM_ssin(current.angle.x);
             mAcch.CrrPos(dComIfG_Bgsp());
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_action_pos_move_f(this, NULL);
+#else
             fopAcM_posMoveF(this, NULL);
+#endif
 
             if (field_0x830.z > -400.0f) {
                 mDemoCamCenter.set(0.0f, -140.0f, -930.0f);
             } else {
+#if TARGET_PC  // enemy attribute integration
+                actor_attr::enemy_chase_action_pos(this, &mDemoCamCenter, current.pos, 100.0f);
+#else
                 cLib_chasePos(&mDemoCamCenter, current.pos, 100.0f);
+#endif
             }
 
             mDemoCamEye.set(0.0f, 220.0f, 1200.0f);
@@ -615,89 +931,171 @@ void daL7ODR_c::dr_fly() {
             mSound.startCreatureSoundLevel(Z2SE_EN_DR_GLIDE, 0, -1);
 
             if (current.angle.x < -0x2000) {
+#if TARGET_PC  // enemy attribute integration
+                actor_attr::enemy_set_animation(this, mpModelMorf, (J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x42), 0, 3.0f, 1.0f, 0.0f, -1.0f);
+#else
                 mpModelMorf->setAnm((J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x42), 0, 3.0f, 1.0f, 0.0f, -1.0f);
+#endif
                 field_0x890 = 0x42;
                 field_0x88c++;
             }
         } else if (field_0x88c == 11) {
             if (speedF < 40.0f) {
+#if TARGET_PC  // enemy attribute integration
+                actor_attr::enemy_add_action_angle(this, &current.angle.x, 0, 0x20, 0x800, 0x200);
+#else
                 cLib_addCalcAngleS(&current.angle.x, 0, 0x20, 0x800, 0x200);
+#endif
             } else {
+#if TARGET_PC  // enemy attribute integration
+                actor_attr::enemy_chase_action_float(this, &field_0x898, 3072.0f, 96.0f);
+                actor_attr::enemy_chase_action_angle(this, &current.angle.x, -0x4000, field_0x898);
+#else
                 cLib_chaseF(&field_0x898, 3072.0f, 96.0f);
                 cLib_chaseAngleS(&current.angle.x, -0x4000, field_0x898);
+#endif
             }
 
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &field_0x89c, 8.0f, 0.3f);
+            actor_attr::enemy_chase_action_float(this, &speedF, 0.0f, field_0x89c);
+#else
             cLib_chaseF(&field_0x89c, 8.0f, 0.3f);
             cLib_chaseF(&speedF, 0.0f, field_0x89c);
+#endif
             speed.y = -speedF * cM_ssin(current.angle.x);
             mAcch.CrrPos(dComIfG_Bgsp());
 
             s16 sp8 = current.angle.y;
             current.angle.y = -0x8000;
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_action_pos_move_f(this, NULL);
+#else
             fopAcM_posMoveF(this, NULL);
+#endif
             current.angle.y = sp8;
 
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_pos(this, &mDemoCamCenter, current.pos, 100.0f);
+#else
             cLib_chasePos(&mDemoCamCenter, current.pos, 100.0f);
+#endif
             mDemoCamEye.set(0.0f, 220.0f, 1200.0f);
             camera->mCamera.Set(mDemoCamCenter, mDemoCamEye);
 
+#if TARGET_PC  // enemy attribute integration
+            if (mpModelMorf->checkFrame(5.0f) || mpModelMorf->checkFrame(35.0f)) {
+#else
             if (5.0f == mpModelMorf->getFrame() || 35.0f == mpModelMorf->getFrame()) {
+#endif
                 mSound.startCreatureSound(Z2SE_EN_DR_WING, 0, -1);
             }
 
             if (mpModelMorf->isStop()) {
+#if TARGET_PC  // enemy attribute integration
+                actor_attr::enemy_set_animation(this, mpModelMorf, (J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x39), 0, 0.0f, 1.0f, 0.0f, -1.0f);
+#else
                 mpModelMorf->setAnm((J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x39), 0, 0.0f, 1.0f, 0.0f, -1.0f);
+#endif
                 fopMsgM_messageSetDemo(0x485);
                 field_0x890 = 0x39;
                 current.angle.y = 0;
                 field_0x88c++;
             }
         } else if (field_0x88c == 12) {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_pos(this, &mDemoCamCenter, field_0x830, 100.0f);
+#else
             cLib_chasePos(&mDemoCamCenter, field_0x830, 100.0f);
+#endif
             mDemoCamEye.set(0.0f, 1700.0f, -680.0f);
             camera->mCamera.Set(mDemoCamCenter, mDemoCamEye);
 
+#if TARGET_PC  // enemy attribute integration
+            if (mpModelMorf->checkFrame(22.0f) || mpModelMorf->checkFrame(59.0f) || mpModelMorf->checkFrame(92.0f) || mpModelMorf->checkFrame(125.0f)) {
+#else
             f32 temp_f1 = mpModelMorf->getFrame();
             if (22.0f == temp_f1 || 59.0f == temp_f1 || 92.0f == temp_f1 || 125.0f == temp_f1) {
+#endif
                 mSound.startCreatureSound(Z2SE_EN_DR_WING, 0, -1);
+#if TARGET_PC  // enemy attribute integration
+            } else if (mpModelMorf->checkFrame(29.0f )) {
+#else
             } else if (29.0f == temp_f1) {
+#endif
                 mSound.startCreatureVoice(Z2SE_EN_DR_V_SCREAM, -1);
+#if TARGET_PC  // enemy attribute integration
+            } else if (mpModelMorf->checkFrame(33.0f )) {
+#else
             } else if (33.0f == temp_f1) {
+#endif
                 dComIfGp_getVibration().StartQuake(VIBMODE_Q_POWER4, 0x1F, cXyz(0.0f, 1.0f, 0.0f));
+#if TARGET_PC  // enemy attribute integration
+            } else if (mpModelMorf->checkFrame(132.0f )) {
+#else
             } else if (132.0f == temp_f1) {
+#endif
                 dComIfGp_getVibration().StopQuake(0x1F);
             }
 
             if (mpModelMorf->isStop()) {
+#if TARGET_PC  // enemy attribute integration
+                actor_attr::enemy_set_animation(this, mpModelMorf, (J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x35), 2, 3.0f, 1.0f, 0.0f, -1.0f);
+#else
                 mpModelMorf->setAnm((J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x35), 2, 3.0f, 1.0f, 0.0f, -1.0f);
+#endif
                 field_0x890 = 0x35;
                 field_0x8b5 = 120;
                 field_0x88c++;
             }
         } else if (field_0x88c == 13) {
             cXyz sp1EC;
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_pos(this, &mDemoCamCenter, field_0x830, 100.0f);
+#else
             cLib_chasePos(&mDemoCamCenter, field_0x830, 100.0f);
+#endif
             sp1EC = player->current.pos;
             sp1EC.y += 200.0f;
             sp1EC.z += 200.0f;
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_pos(this, &mDemoCamEye, sp1EC, 10.0f);
+#else
             cLib_chasePos(&mDemoCamEye, sp1EC, 10.0f);
+#endif
             camera->mCamera.Set(mDemoCamCenter, mDemoCamEye);
 
+#if TARGET_PC  // enemy attribute integration
+            if (mpModelMorf->checkFrame(7.0f)) {
+#else
             if (7.0f == mpModelMorf->getFrame()) {
+#endif
                 mSound.startCreatureSound(Z2SE_EN_DR_WING, 0, -1);
             }
 
             if (field_0x8b5 == 0) {
                 if (mpModelMorf->getFrame() >= 33.0f) {
+#if TARGET_PC  // enemy attribute integration
+                    actor_attr::enemy_set_animation(this, mpModelMorf, (J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x34), 0, 3.0f, 1.0f, 0.0f, -1.0f);
+#else
                     mpModelMorf->setAnm((J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x34), 0, 3.0f, 1.0f, 0.0f, -1.0f);
+#endif
                     field_0x890 = 0x34;
                     field_0x88c++;
                 }
             }
         } else {
+#if TARGET_PC  // enemy attribute integration
+            if (mpModelMorf->checkFrame(7.0f) || mpModelMorf->checkFrame(37.0f)) {
+#else
             if (7.0f == mpModelMorf->getFrame() || 37.0f == mpModelMorf->getFrame()) {
+#endif
                 mSound.startCreatureSound(Z2SE_EN_DR_WING, 0, -1);
+#if TARGET_PC  // enemy attribute integration
+            } else if (mpModelMorf->checkFrame(62.0f)) {
+#else
             } else if (62.0f == mpModelMorf->getFrame()) {
+#endif
                 argument = 1;
             }
 
@@ -715,13 +1113,23 @@ void daL7ODR_c::dr_fly() {
 }
 
 int daL7ODR_c::execute() {
+#if !TARGET_PC  // enemy attribute integration
     if (field_0x8b5 != 0) {
         field_0x8b5--;
     }
+#endif
 
+#if TARGET_PC  // enemy attribute integration
+    field_0x8a4 += actor_attr::enemy_action_time_speed(this);
+    const int timerTicks = static_cast<int>(field_0x8a4);
+    field_0x8a4 -= timerTicks;
+    l7_tick_demo_timer(field_0x8b5, timerTicks);
+    l7_tick_demo_timer(field_0x8b6, timerTicks);
+#else
     if (field_0x8b6 != 0) {
         field_0x8b6--;
     }
+#endif
 
     action();
     dr_action();
@@ -761,7 +1169,11 @@ static int daL7ODR_Delete(daL7ODR_c* i_this) {
 int daL7ODR_c::CreateHeap() {
     J3DModelData* modelData = (J3DModelData*)dComIfG_getObjectRes("B_dr", 0x49);
     JUT_ASSERT(1146, modelData != NULL);
+#if TARGET_PC  // enemy attribute integration
+    mpModelMorf = JKR_NEW mDoExt_McaMorfSO(modelData, NULL, NULL, (J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x2F), 2, actor_attr::enemy_action_time_speed(this), 0, -1, &mSound, 0, 0x11000084);
+#else
     mpModelMorf = JKR_NEW mDoExt_McaMorfSO(modelData, NULL, NULL, (J3DAnmTransform*)dComIfG_getObjectRes("B_dr", 0x2F), 2, 1.0f, 0, -1, &mSound, 0, 0x11000084);
+#endif
     field_0x890 = 0x2F;
     if (mpModelMorf == NULL || mpModelMorf->getModel() == NULL) {
         return 0;
@@ -811,7 +1223,11 @@ int daL7ODR_c::create() {
 
         field_0x560 = health = 1;
 
+#if TARGET_PC  // enemy attribute integration
+        scale= actor_attr::enemy_size_multiplier(this, 1.0f);
+#else
         scale.setall(1.0f);
+#endif
 
         attention_info.distances[fopAc_attn_BATTLE_e] = 0;
         attention_info.flags &= ~fopAc_AttnFlag_BATTLE_e;
@@ -820,7 +1236,14 @@ int daL7ODR_c::create() {
         fopAcM_OffStatus(this, 0);
 
         mAcch.Set(fopAcM_GetPosition_p(this), fopAcM_GetOldPosition_p(this), this, 1, &mAcchCir, fopAcM_GetSpeed_p(this), NULL, NULL);
+#if TARGET_PC  // enemy attribute integration
+        const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(this);
+        mAcchCir.SetWall(20.0f * sizeMultiplier, 40.0f * sizeMultiplier);
+
+        field_0x8a4 = 0.0f;
+#else
         mAcchCir.SetWall(20.0f, 40.0f);
+#endif
 
         setAction(&daL7ODR_c::wait);
         setDrAction(&daL7ODR_c::dr_wait);

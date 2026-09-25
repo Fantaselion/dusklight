@@ -16,6 +16,9 @@ static int daE_DB_LEAF_Execute(e_db_leaf_class* i_this) {
     mDoMtx_stack_c::transS(i_this->current.pos.x, i_this->current.pos.y, i_this->current.pos.z);
     mDoMtx_stack_c::YrotM(i_this->shape_angle.y);
     mDoMtx_stack_c::XrotM(i_this->shape_angle.x);
+#if TARGET_PC  // enemy attribute integration
+    mDoMtx_stack_c::scaleM(i_this->scale.x, i_this->scale.y, i_this->scale.z); // since were changing the leaf scale in d_a_e_db, we need it to actually reflect here
+#endif
     i_this->mpMorf->getModel()->setBaseTRMtx(mDoMtx_stack_c::now);
     i_this->mpMorf->modelCalc();
     return 1;

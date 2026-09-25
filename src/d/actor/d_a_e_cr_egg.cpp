@@ -9,15 +9,56 @@
 #include "d/d_cc_d.h"
 #include "d/d_com_inf_game.h"
 #include "d/d_s_play.h"
+#if TARGET_PC  // additional actor attribute integration
+#include "dusk/mods/svc/actor_attribute_helpers.hpp"
+
+namespace actor_attr = dusk::mods::svc::actor_attr;
+
+namespace dusk::mods::svc::actor_attr {
+
+template <>
+struct EnemyActorAccessor<e_cr_egg_class> {
+    static fopAc_ac_c* get(e_cr_egg_class* i_this) {
+
+        return &i_this->enemy;
+
+}
+};
+
+template <>
+struct EnemyAttributeOwner<e_cr_egg_class> {
+    static fopAc_ac_c* get(e_cr_egg_class* i_this) {
+
+        fopAc_ac_c* actor = EnemyActorAccessor<e_cr_egg_class>::get(i_this);
+        fopAc_ac_c* parent = fopAcM_SearchByID(fopAcM_GetLinkId(actor));
+
+        if (parent != NULL && fopAcM_GetName(parent) == fpcNm_E_CR_e) {
+            return parent;
+        }
+
+        return actor;
+
+}
+};
+
+}  // namespace dusk::mods::svc::actor_attr
+#endif
 
 static int daE_CR_EGG_Draw(e_cr_egg_class* a_this) {
     fopAc_ac_c* actor = &a_this->enemy;
+#if TARGET_PC  // enemy attribute integration
+    const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(a_this);
+#endif
 
     g_env_light.settingTevStruct(0, &actor->current.pos, &actor->tevStr);
     g_env_light.setLightTevColorType_MAJI(a_this->model, &actor->tevStr);
     mDoExt_modelUpdateDL(a_this->model);
 
+#if TARGET_PC  // enemy attribute integration
+    dComIfGd_setSimpleShadow(&actor->current.pos, a_this->acch.GetGroundH(), (30.0f + TREG_F(10)) * sizeMultiplier, a_this->acch.m_gnd, 0, 1.0f, dDlst_shadowControl_c::getSimpleTex());
+#else
     dComIfGd_setSimpleShadow(&actor->current.pos, a_this->acch.GetGroundH(), 30.0f + TREG_F(10), a_this->acch.m_gnd, 0, 1.0f, dDlst_shadowControl_c::getSimpleTex());
+#endif
     return 1;
 }
 
@@ -27,7 +68,11 @@ static void e_cr_egg_move(e_cr_egg_class* a_this) {
     switch (a_this->mode) {
     case 0:
         a_this->mode = 1;
+#if TARGET_PC  // enemy attribute integration
+        a_this->timers[0] = actor_attr::enemy_sync_timer(a_this, 150);
+#else
         a_this->timers[0] = 150;
+#endif
         actor->speedF = 5.0f + cM_rndF(3.0f);
         actor->current.angle.y += (s16)cM_rndFX(10000.0f);
     case 1:
@@ -35,14 +80,22 @@ static void e_cr_egg_move(e_cr_egg_class* a_this) {
     case 3:
     case 4:
         if (a_this->acch.ChkWallHit() && a_this->timers[1] == 0) {
+#if TARGET_PC  // enemy attribute integration
+            a_this->timers[1] = actor_attr::enemy_sync_timer(a_this, 10);
+#else
             a_this->timers[1] = 10;
+#endif
             actor->speedF *= -0.5f;
         }
 
         if (a_this->acch.ChkGroundHit()) {
             if (a_this->mode < 4) {
                 static f32 spy[] = {17.0f, 8.0f, 5.0f};
+#if TARGET_PC  // enemy attribute integration
+                actor->speed.y = actor_attr::enemy_move_step(a_this, spy[a_this->mode - 1]);
+#else
                 actor->speed.y = spy[a_this->mode - 1];
+#endif
                 actor->current.angle.y += (s16)cM_rndFX(8000.0f);
 
                 int sp28[3] = {40, 20, 10};
@@ -50,13 +103,21 @@ static void e_cr_egg_move(e_cr_egg_class* a_this) {
                 a_this->mode++;
             }
 
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_add_action_calc0(a_this, &actor->speedF, 1.0f, 0.5f + TREG_F(4));
+#else
             cLib_addCalc0(&actor->speedF, 1.0f, 0.5f + TREG_F(4));
+#endif
         }
 
         if (a_this->timers[0] == 0 || a_this->ccSph.ChkTgHit() || a_this->ccSph.ChkAtHit()) {
             fopAcM_delete(actor);
 
+#if TARGET_PC  // enemy attribute integration
+            cXyz effscale = actor_attr::enemy_size_multiplier(a_this, 0.5f);
+#else
             cXyz effscale(0.5f, 0.5f, 0.5f);
+#endif
             u16 eff_id = 0x109;
             if (a_this->timers[0] == 0) {
                 eff_id = 0x108;
@@ -79,27 +140,53 @@ static void action(e_cr_egg_class* a_this) {
         break;
     }
 
+#if TARGET_PC  // enemy attribute integration
+    actor_attr::enemy_angle_add(a_this, actor->current.angle.x , (s16)(actor->speedF * (700.0f + TREG_F(9))));
+#else
     actor->current.angle.x += (s16)(actor->speedF * (700.0f + TREG_F(9)));
+#endif
 
     cMtx_YrotS(*calc_mtx, actor->current.angle.y);
     mae.x = 0.0f;
     mae.y = 0.0f;
+#if TARGET_PC  // enemy attribute integration
+    mae.z = actor_attr::enemy_move_step(a_this, actor->speedF);
+#else
     mae.z = actor->speedF;
+#endif
     MtxPosition(&mae, &ato);
     actor->speed.x = ato.x;
     actor->speed.z = ato.z;
     actor->current.pos += actor->speed;
+#if TARGET_PC  // enemy attribute integration
+    actor->speed.y -= actor_attr::enemy_gravity_step(a_this, 3.0f);
+#else
     actor->speed.y -= 3.0f;
+#endif
 
+#if TARGET_PC  // enemy attribute integration
+    const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(a_this);
+    actor->current.pos.y -= 20.0f * sizeMultiplier;
+    actor->old.pos.y -= 20.0f * sizeMultiplier;
+#else
     actor->current.pos.y -= 20.0f;
     actor->old.pos.y -= 20.0f;
+#endif
     a_this->acch.CrrPos(dComIfG_Bgsp());
+#if TARGET_PC  // enemy attribute integration
+    actor->current.pos.y += 20.0f * sizeMultiplier;
+    actor->old.pos.y += 20.0f * sizeMultiplier;
+#else
     actor->current.pos.y += 20.0f;
     actor->old.pos.y += 20.0f;
+#endif
 }
 
 static int daE_CR_EGG_Execute(e_cr_egg_class* a_this) {
     fopAc_ac_c* actor = &a_this->enemy;
+#if TARGET_PC  // enemy attribute integration
+    const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(a_this);
+#endif
     cXyz sp2C;
     cXyz sp20;
 
@@ -120,15 +207,32 @@ static int daE_CR_EGG_Execute(e_cr_egg_class* a_this) {
     mDoMtx_stack_c::transS(actor->current.pos.x, actor->current.pos.y, actor->current.pos.z);
     mDoMtx_stack_c::YrotM(actor->current.angle.y);
     mDoMtx_stack_c::XrotM(actor->current.angle.x);
+#if TARGET_PC  // enemy attribute integration
+    mDoMtx_stack_c::transM(0.0f, (TREG_F(12) - 20.0f) * sizeMultiplier, 0.0f);
+#else
     mDoMtx_stack_c::transM(0.0f, TREG_F(12) - 20.0f, 0.0f);
+#endif
     
     f32 size = 1.0f + TREG_F(17);
+#if TARGET_PC  // enemy attribute integration
+    const f32 modelSize = size * sizeMultiplier;
+    mDoMtx_stack_c::scaleM(modelSize, modelSize, modelSize);
+#else
     mDoMtx_stack_c::scaleM(size, size, size);
+#endif
     a_this->model->setBaseTRMtx(mDoMtx_stack_c::get());
 
+#if TARGET_PC  // enemy attribute integration
+    cXyz c_offset(0.0f, 20.0f * sizeMultiplier, 0.0f);
+#else
     cXyz c_offset(0.0f, 20.0f, 0.0f);
+#endif
     a_this->ccSph.SetC(actor->current.pos + c_offset);
+#if TARGET_PC  // enemy attribute integration
+    a_this->ccSph.SetR(size * (20.0f + BREG_F(0)) * sizeMultiplier);
+#else
     a_this->ccSph.SetR(size * (20.0f + BREG_F(0)));
+#endif
     dComIfG_Ccsp()->Set(&a_this->ccSph);
     return 1;
 }
@@ -203,11 +307,18 @@ static int daE_CR_EGG_Create(fopAc_ac_c* i_this) {
         a_this->ccStts.Init(50, 0, i_this);
         a_this->ccSph.Set(cc_sph_src);
         a_this->ccSph.SetStts(&a_this->ccStts);
-    
+#if TARGET_PC  // enemy attribute integration
+        a_this->ccSph.SetAtAtp(actor_attr::enemy_attack_power_byte(a_this, 1.0f));
+#endif
         a_this->sound.init(&i_this->current.pos, NULL, 3, 1);
 
         a_this->acch.Set(fopAcM_GetPosition_p(i_this), fopAcM_GetOldPosition_p(i_this), i_this, 1, &a_this->acchcir, fopAcM_GetSpeed_p(i_this), NULL, NULL);
+#if TARGET_PC  // enemy attribute integration
+        const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(a_this);
+        a_this->acchcir.SetWall(20.0f * sizeMultiplier, 20.0f * sizeMultiplier);
+#else
         a_this->acchcir.SetWall(20.0f, 20.0f);
+#endif
     
         daE_CR_EGG_Execute(a_this);
     }

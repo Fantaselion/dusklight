@@ -7,6 +7,23 @@
 
 #include "d/actor/d_a_e_bi_leaf.h"
 #include "d/d_com_inf_game.h"
+#if TARGET_PC  // enemy attribute integration
+#include "dusk/mods/svc/actor_attribute_helpers.hpp"
+
+namespace actor_attr = dusk::mods::svc::actor_attr;
+
+static void update_attributes(e_bi_leaf_class* i_this) {
+
+    fopAc_ac_c* child_p = fopAcM_SearchByID(i_this->parentActorID);
+    if (i_this->speedF < 0.0f && child_p != NULL && fopAcM_GetName(child_p) == fpcNm_E_BI_e) {
+        f32 size = actor_attr::resolve_multiplier(child_p, ACTOR_ATTRIBUTE_SIZE);
+        i_this->scale.set(size, size, size);
+
+        /* E_BI_LEAF has no locomotion, so speedF caches the tracked BI's action speed. */
+        i_this->speedF = actor_attr::resolve_multiplier(child_p, ACTOR_ATTRIBUTE_MOVEMENT_SPEED);
+    }
+}
+#endif
 
 static int daE_BI_LEAF_Draw(e_bi_leaf_class* i_this) {
     if (i_this->type == 1) {
@@ -28,9 +45,17 @@ static void action(e_bi_leaf_class* i_this) {
                 OS_REPORT("//////////////LEAF ID 2  %d\n", i_this->parentActorID);
 
                 if (fopAcM_GetRoomNo(i_this) == 50) {
+#if TARGET_PC  // enemy attribute integration
+                    i_this->timer = actor_attr::sync_timer(90.0f, i_this->speedF);
+#else
                     i_this->timer = 90;
+#endif
                 } else {
+#if TARGET_PC  // enemy attribute integration
+                    i_this->timer = actor_attr::sync_timer(60.0f, i_this->speedF);
+#else
                     i_this->timer = 60;
+#endif
                 }
 
                 i_this->action = 1;
@@ -45,7 +70,11 @@ static void action(e_bi_leaf_class* i_this) {
                 fopAcM_createChild(fpcNm_E_BI_e, fopAcM_GetID(i_this), (i_this->type << 8) | 1,
                                    &i_this->current.pos, fopAcM_GetRoomNo(i_this),
                                    &i_this->current.angle, NULL, -1, NULL);
+#if TARGET_PC  // enemy attribute integration
+            i_this->timer = actor_attr::sync_timer(20.0f, i_this->speedF);
+#else
             i_this->timer = 20;
+#endif
         }
         break;
     }
@@ -56,6 +85,9 @@ static int daE_BI_LEAF_Execute(e_bi_leaf_class* i_this) {
         i_this->timer--;
     }
 
+#if TARGET_PC  // enemy attribute integration
+    update_attributes(i_this);
+#endif
     action(i_this);
 
     if (i_this->type == 1) {
@@ -64,6 +96,9 @@ static int daE_BI_LEAF_Execute(e_bi_leaf_class* i_this) {
 
     mDoMtx_stack_c::transS(i_this->current.pos.x, i_this->current.pos.y, i_this->current.pos.z);
     mDoMtx_stack_c::YrotM(i_this->shape_angle.y);
+#if TARGET_PC  // enemy attribute integration
+    mDoMtx_stack_c::scaleM(i_this->scale.x, i_this->scale.y, i_this->scale.z);
+#endif
     i_this->model->setBaseTRMtx(mDoMtx_stack_c::get());
     return 1;
 }
@@ -100,6 +135,10 @@ static int daE_BI_LEAF_Create(fopAc_ac_c* actor) {
     int phase_state = dComIfG_resLoad(&i_this->phase, "E_BI");
     if (phase_state == cPhs_COMPLEATE_e) {
         i_this->type = fopAcM_GetParam(i_this) & 0xFF;
+#if TARGET_PC  // enemy attribute integration
+        /* Negative until the original child supplies the persistent values. */
+        i_this->speedF = -1.0f;
+#endif
         OS_REPORT("E_BI_LEAF//////////////E_BI_LEAF SET 1 !!\n");
 
         if (!fopAcM_entrySolidHeap(i_this, useHeapInit, 0xA00)) {

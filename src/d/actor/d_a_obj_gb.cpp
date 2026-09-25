@@ -10,7 +10,15 @@
 #include "SSystem/SComponent/c_math.h"
 #include "d/d_bg_w.h"
 #include "d/d_com_inf_game.h"
+#if TARGET_PC  // additional actor attribute integration
+#include "dusk/mods/svc/actor_attribute_helpers.hpp"
+#include "f_op/f_op_actor_mng.h"
+#endif
 #include <cstring>
+#if TARGET_PC  // additional actor attribute integration
+
+namespace actor_attr = dusk::mods::svc::actor_attr;
+#endif
 
 static int daObj_Gb_Draw(obj_gb_class* i_this) {
     g_env_light.settingTevStruct(0x10, &i_this->current.pos, &i_this->tevStr);
@@ -187,6 +195,20 @@ static int daObj_Gb_Create(fopAc_ac_c* actor) {
         }
         if (i_this->field_0x57c == 0) {
             i_this->scale.x = local_47 * 0.01f;
+#if TARGET_PC  // enemy attribute integration
+
+            // The final Ganondorf barrier is spawned as a separate Obj_gb actor,
+            // so inherit Ganondorf's randomized size explicitly.  Keep the
+            // barrier's encoded vanilla 1.5x ring scale as the baseline and
+            // scale only its horizontal radius (X/Z); vertical height remains
+            // controlled by the original Obj_gb parameter.
+            if (fopAcM_GetParam(i_this) == 0xF0069600) {
+                fopAc_ac_c* ganondorf = NULL;
+                if (fopAcM_SearchByName(fpcNm_B_GND_e, &ganondorf) && ganondorf != NULL) {
+                    i_this->scale.x *= actor_attr::enemy_size_multiplier(ganondorf);
+                }
+            }
+#endif
         } else {
             i_this->scale.x = local_47 * 0.5f;
         }

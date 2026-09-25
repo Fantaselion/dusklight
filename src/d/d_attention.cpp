@@ -10,6 +10,7 @@
 #include "f_op/f_op_actor_mng.h"
 #include "m_Do/m_Do_controller_pad.h"
 #include "SSystem/SComponent/c_counter.h"
+#include "dusk/mods/svc/actor_attribute_helpers.hpp"
 #include <cstring>
 
 #if TARGET_PC
@@ -18,6 +19,19 @@
 
 #define DRAW_TYPE_YELLOW 0
 #define DRAW_TYPE_RED    1
+
+namespace actor_attr = dusk::mods::svc::actor_attr;
+
+static f32 attention_vertical_range_scale(const fopAc_ac_c* actor) {
+    const f32 size = actor_attr::resolve_multiplier(
+        actor,
+        ACTOR_ATTRIBUTE_SIZE
+    );
+
+    // Enlarged actors need more room; small actors should not become
+    // unnecessarily difficult to target.
+    return size > 1.0f ? size : 1.0f;
+}
 
 class dAttDrawParam_c : public JORReflexible {
 public:
@@ -164,7 +178,6 @@ dAttention_c::dAttention_c(fopAc_ac_c* i_player, u32 i_padNo) {
     mPadNo = i_padNo;
 
     mLockTargetID = fpcM_ERROR_PROCESS_ID_e;
-    IF_DUSK(mTargetActorID = fpcM_ERROR_PROCESS_ID_e);
     field_0x32e = 0;
     field_0x32f = 0;
 
@@ -505,6 +518,7 @@ f32 dAttention_c::calcWeight(int i_listType, fopAc_ac_c* i_actor, f32 i_distance
         if (mPlayerAttentionFlags & type_tbl_entry->mask & i_actor->attention_info.flags) {
             dist_index = i_actor->attention_info.distances[type_tbl_entry->type];
             dist_entry* dist_tbl_entry = &dist_table[dist_index];
+            const f32 vertical_scale = attention_vertical_range_scale(i_actor);
 
             if (fopAcM_CheckStatus(i_actor, 0x20000000) ||
                 check_event_condition(type_tbl_entry->type, i_actor->eventInfo.getCondition())) {
@@ -512,8 +526,9 @@ f32 dAttention_c::calcWeight(int i_listType, fopAc_ac_c* i_actor, f32 i_distance
             } else if (check_flontofplayer(dist_tbl_entry->mAngleSelect, i_angle, i_invAngle)) {
                 dist_weight = 0.0f;
             } else if (!check_distace(&mOwnerAttnPos, i_angle, &i_actor->attention_info.position,
-                                      dist_tbl_entry->mDistMax, dist_tbl_entry->mDistanceAdjust, dist_tbl_entry->mUpperY,
-                                      dist_tbl_entry->mLowerY)) {
+                                      dist_tbl_entry->mDistMax, dist_tbl_entry->mDistanceAdjust,
+                                      dist_tbl_entry->mUpperY * vertical_scale,
+                                      dist_tbl_entry->mLowerY * vertical_scale)) {
                 dist_weight = 0.0f;
             } else {
                 dist_weight = distace_weight(i_distance, i_angle, 0.5f);
@@ -803,6 +818,7 @@ bool dAttention_c::chaseAttention() {
         if (weight <= 0.0f) {
             type = mLockOnList[offset].mType;
             int tbl_idx = actor->attention_info.distances[type];
+            const f32 vertical_scale = attention_vertical_range_scale(actor);
 
             if (!chkAttMask(type, actor->attention_info.flags)) {
                 return false;
@@ -813,7 +829,8 @@ bool dAttention_c::chaseAttention() {
             } else if (check_distace(&mOwnerAttnPos, a1.Val(), &actor->attention_info.position,
                                      dist_table[tbl_idx].mDistMaxRelease,
                                      dist_table[tbl_idx].mDistanceAdjust,
-                                     dist_table[tbl_idx].mUpperY, dist_table[tbl_idx].mLowerY)) {
+                                     dist_table[tbl_idx].mUpperY * vertical_scale,
+                                     dist_table[tbl_idx].mLowerY * vertical_scale)) {
                 f32 weight = distace_weight(g1.R(), a1.Val(), 0.5f);
                 mLockOnList[offset].mWeight = weight;
                 return true;
@@ -1456,13 +1473,6 @@ if (dusk::getSettings().game.recordingMode) {
             }
             #endif
 
-#if TARGET_PC
-            if (mTargetActorID != fopAcM_GetID(lockon_actor) ||
-                (fopAcM_GetName(lockon_actor) == fpcNm_Tag_Wljump_e &&
-                 mDrawAttnPos != lockon_actor->attention_info.position)) {
-                draw[0].mModel[draw[0].mDrawType]->forgetMtx();
-            }
-#endif
             draw[0].draw(lockon_actor->attention_info.position, inv_m);
 
             if (mLockonCount >= 2 && draw[1].field_0x173 == 2) {
@@ -1491,12 +1501,6 @@ if (dusk::getSettings().game.recordingMode) {
             fopAc_ac_c* actor = fopAcM_SearchByID(mTargetActorID);
 
             if (actor != NULL) {
-#if TARGET_PC
-                if (fopAcM_GetName(actor) == fpcNm_Tag_Wljump_e &&
-                    mDrawAttnPos != actor->attention_info.position) {
-                    draw[0].mModel[draw[0].mDrawType]->forgetMtx();
-                }
-#endif
                 draw[0].draw(actor->attention_info.position, inv_m);
                 mDrawAttnPos = actor->attention_info.position;
             } else {
@@ -1520,7 +1524,6 @@ void dAttention_c::lockSoundStart(u32 i_sfxID) {
 
 void dAttDraw_c::setAnm(u8 i_drawType, f32 i_anmSpeed) {
     mDrawType = i_drawType;
-    IF_DUSK(mModel[mDrawType]->forgetMtx());
     mNoticeCursorBck[mDrawType].reset();
     mNoticeCursorBck[mDrawType].setPlaySpeed(i_anmSpeed);
     mNoticeCursorBpk[mDrawType].reset();

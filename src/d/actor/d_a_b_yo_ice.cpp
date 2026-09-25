@@ -6,6 +6,9 @@
 #include "d/dolzel_rel.h" // IWYU pragma: keep
 
 #include "d/actor/d_a_b_yo_ice.h"
+#if TARGET_PC  // additional actor attribute integration
+#include "dusk/mods/svc/actor_attribute_helpers.hpp"
+#endif
 #include "JSystem/J3DGraphBase/J3DMaterial.h"
 #include "SSystem/SComponent/c_math.h"
 #include "f_op/f_op_actor_mng.h"
@@ -14,6 +17,21 @@
 #include "d/actor/d_a_player.h"
 #include "d/d_camera.h"
 #include "d/d_com_inf_game.h"
+#if TARGET_PC  // additional actor attribute integration
+
+namespace actor_attr = dusk::mods::svc::actor_attr;
+
+namespace dusk::mods::svc::actor_attr {
+template <> struct EnemyAttributeOwner<daB_YOI_c> {
+    static fopAc_ac_c* get(daB_YOI_c* i_this) {
+
+        fopAc_ac_c* parent = fopAcM_SearchByID(fopAcM_GetLinkId(i_this));
+        return parent != NULL && fopAcM_GetName(parent) == fpcNm_B_YO_e ? parent : i_this;
+
+}
+};
+}
+#endif
 
 class daB_YOI_HIO_c {
 public:
@@ -80,6 +98,31 @@ static dCcD_SrcCyl cc_yo_cam_src = {
         } // mCyl
     } // mCylAttr
 };
+#if TARGET_PC  // enemy attribute integration
+
+/* The arena floor remains at world Y = 0.  These two offsets describe where
+   the resized icicle body begins entering that floor and where its origin
+   rests after it has become embedded. */
+static f32 yoi_landing_start_height(daB_YOI_c* i_this) {
+
+    return actor_attr::enemy_size_value(i_this, 100.0f);
+}
+
+static f32 yoi_embedded_height(daB_YOI_c* i_this) {
+
+    return actor_attr::enemy_size_value(i_this, -200.0f);
+}
+
+static void yoi_lock_embedded_height(daB_YOI_c* i_this) {
+
+    /* Vanilla stops on the first frame below -200 rather than snapping to it.
+       Preserve that exact 100% path while preventing a fall step from leaving
+       a resized icicle deeper than its size-correct resting point. */
+    if (actor_attr::enemy_size_multiplier(i_this) != 1.0f) {
+        i_this->current.pos.y = yoi_embedded_height(i_this);
+    }
+}
+#endif
 
 }  // namespace
 
@@ -130,12 +173,24 @@ void daB_YOI_c::damage_check() {
         if (mCcCyl0.ChkTgHit()) {
             mAtInfo.mpCollider = mCcCyl0.GetTgHitObj();
             if (mAtInfo.mpCollider->ChkAtType(AT_TYPE_UNK)) {
+#if TARGET_PC  // enemy attribute integration
+                mIFrameTimer = actor_attr::enemy_sync_timer(this, 20);
+#else
                 mIFrameTimer = 20;
+#endif
             } else {
+#if TARGET_PC  // enemy attribute integration
+                mIFrameTimer = actor_attr::enemy_sync_timer(this, 10);
+#else
                 mIFrameTimer = 10;
+#endif
             }
             if (mAtInfo.mAttackPower <= 1) {
+#if TARGET_PC  // enemy attribute integration
+                mIFrameTimer = actor_attr::enemy_sync_timer(this, 10);
+#else
                 mIFrameTimer = 10;
+#endif
             }
             def_se_set(&mCreatureSound, mAtInfo.mpCollider, 0x2A, this);
         }
@@ -147,10 +202,18 @@ void daB_YOI_c::damage_check() {
         mpBlizzeta->onIceBreak(mIcicleNo);
         mSoundObj.startSound(Z2SE_EN_YO_ICE_BREAK, 0, -1);
         
+#if TARGET_PC  // enemy attribute integration
+        if (current.pos.y <= yoi_landing_start_height(this)) {
+#else
         if (current.pos.y <= 100.0f) {
+#endif
             fopAcM_delete(this);
         } else {
+#if TARGET_PC  // enemy attribute integration
+            mDeleteTimer = actor_attr::enemy_sync_u8_timer(this, 15);
+#else
             mDeleteTimer = 15;
+#endif
         }
 
         if (cM_rnd() < 0.33f) {
@@ -261,8 +324,13 @@ void daB_YOI_c::executeFirst() {
         gravity = 0.0f;
         speed.y = 0.0f;
         mMode = 1;
+#if TARGET_PC  // enemy attribute integration
+        mTimer1 = actor_attr::enemy_sync_timer(this, 150.0f + cM_rndFX(10.0f));
+        mTimer2 = actor_attr::enemy_sync_timer(this, 200);
+#else
         mTimer1 = 150.0f + cM_rndFX(10.0f);
         mTimer2 = 200;
+#endif
         // fallthrough
 
     case 1:
@@ -284,15 +352,27 @@ void daB_YOI_c::executeFirst() {
     case 2:
         mSoundObj.startLevelSound(Z2SE_EN_YO_ICE_MOVE, 0, -1);
         if (current.pos.y < pos.y) {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &speed.y, 10.0f, 0.5f);
+#else
             cLib_chaseF(&speed.y, 10.0f, 0.5f);
+#endif
         } else {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &speed.y, -10.0f, 0.5f);
+#else
             cLib_chaseF(&speed.y, -10.0f, 0.5f);
+#endif
         }
 
         if (mTimer2 == 0) {
             angle = mIcicleNo * 0x1999;
             pos.set(pos.x + range * cM_ssin(angle), current.pos.y, pos.z + range * cM_scos(angle));
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_pos_xz(this, &current.pos, pos, 5.0f);
+#else
             cLib_chasePosXZ(&current.pos, pos, 5.0f);
+#endif
         }
     }
 }
@@ -326,22 +406,39 @@ void daB_YOI_c::executeRiseUp() {
     case 0:
         speed.y = 0.0f;
         speedF = 0.0f;
+#if TARGET_PC  // enemy attribute integration
+        mTimer1 = actor_attr::enemy_sync_timer(this, 150);
+#else
         mTimer1 = 150;
+#endif
         mMode = 5;
         // fallthrough
 
     case 5:
     case 6:
         mSoundObj.startLevelSound(Z2SE_EN_YO_ICE_VIBERATE, 0, -1);
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_angle(this, &shape_angle.x, 0, 0x40);
+        actor_attr::enemy_chase_action_angle(this, &shape_angle.z, 0, 0x40);
+#else
         cLib_chaseAngleS(&shape_angle.x, 0, 0x40);
         cLib_chaseAngleS(&shape_angle.z, 0, 0x40);
+#endif
         mWobbleAngle.x = cM_rndFX(0x40);
         mWobbleAngle.z = cM_rndFX(0x40);
         
         if (mMode == 5) {
+#if TARGET_PC  // enemy attribute integration
+            current.pos.y += actor_attr::enemy_move_step(this, 0.5f);
+#else
             current.pos.y += 0.5f;
+#endif
         } else {
+#if TARGET_PC  // enemy attribute integration
+            current.pos.y += actor_attr::enemy_move_step(this, 0.2f);
+#else
             current.pos.y += 0.2f;
+#endif
         }
 
         if (mTimer1 == 0) {
@@ -369,22 +466,38 @@ void daB_YOI_c::executeRiseUp() {
         // fallthrough
 
     case 7:
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_angle(this, &mAngleSpeedY, 0, 0x40);
+        actor_attr::enemy_angle_add(this, shape_angle.y , mAngleSpeedY);
+        actor_attr::enemy_chase_action_angle(this, &shape_angle.x, 0, 0x40);
+        actor_attr::enemy_chase_action_angle(this, &shape_angle.z, 0, 0x40);
+        if (actor_attr::enemy_chase_action_float(this, &speed.y, 5.0f, 5.0f)) {
+#else
         cLib_chaseAngleS(&mAngleSpeedY, 0, 0x40);
         shape_angle.y += mAngleSpeedY;
         cLib_chaseAngleS(&shape_angle.x, 0, 0x40);
         cLib_chaseAngleS(&shape_angle.z, 0, 0x40);
         if (cLib_chaseF(&speed.y, 5.0f, 5.0f)) {
+#endif
             mMode = 8;
         }
         break;
 
     case 8:
         mSoundObj.startLevelSound(Z2SE_EN_YO_ICE_MOVE, 0, -1);
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_angle(this, &mAngleSpeedY, 0, 0x40);
+        actor_attr::enemy_angle_add(this, shape_angle.y , mAngleSpeedY);
+        actor_attr::enemy_chase_action_float(this, &mScaleF, 1.0f, 0.1f);
+        actor_attr::enemy_chase_action_angle(this, &shape_angle.x, 0, 0x40);
+        actor_attr::enemy_chase_action_angle(this, &shape_angle.z, 0, 0x40);
+#else
         cLib_chaseAngleS(&mAngleSpeedY, 0, 0x40);
         shape_angle.y += mAngleSpeedY;
         cLib_chaseF(&mScaleF, 1.0f, 0.1f);
         cLib_chaseAngleS(&shape_angle.x, 0, 0x40);
         cLib_chaseAngleS(&shape_angle.z, 0, 0x40);
+#endif
 
         if (center_pos.y < 200.0f) {
             center_pos.y = 200.0f;
@@ -393,21 +506,39 @@ void daB_YOI_c::executeRiseUp() {
             center_pos.y = 800.0f;
         }
         if (current.pos.y < center_pos.y - 100.0f) {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &speed.y, 15.0f, 0.5f);
+#else
             cLib_chaseF(&speed.y, 15.0f, 0.5f);
+#endif
         } else {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &speed.y, -15.0f, 0.5f);
+#else
             cLib_chaseF(&speed.y, -15.0f, 0.5f);
+#endif
         }
 
         target.set(center_pos.x + range * cM_ssin(angle + mIcicleNo * 0x1999), current.pos.y,
                    center_pos.z + range * cM_scos(angle + mIcicleNo * 0x1999));
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_pos(this, &current.pos, target, 50.0f);
+#else
         cLib_chasePos(&current.pos, target, 50.0f);
+#endif
         break;
 
     case 9:
         mSoundObj.startLevelSound(Z2SE_EN_YO_ICE_MOVE, 0, -1);
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_float(this, &mScaleF, 1.0f, 0.1f);
+        actor_attr::enemy_chase_action_angle(this, &shape_angle.x, 0, 0x40);
+        actor_attr::enemy_chase_action_angle(this, &shape_angle.z, 0, 0x40);
+#else
         cLib_chaseF(&mScaleF, 1.0f, 0.1f);
         cLib_chaseAngleS(&shape_angle.x, 0, 0x40);
         cLib_chaseAngleS(&shape_angle.z, 0, 0x40);
+#endif
 
         if (center_pos.y < 200.0f) {
             center_pos.y = 200.0f;
@@ -416,17 +547,33 @@ void daB_YOI_c::executeRiseUp() {
             center_pos.y = 800.0f;
         }
         if (current.pos.y < center_pos.y - 100.0f) {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &speed.y, 15.0f, 0.5f);
+#else
             cLib_chaseF(&speed.y, 15.0f, 0.5f);
+#endif
         } else {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &speed.y, -15.0f, 0.5f);
+#else
             cLib_chaseF(&speed.y, -15.0f, 0.5f);
+#endif
         }
 
+#if TARGET_PC  // enemy attribute integration
+        mTimer1 = actor_attr::enemy_sync_timer(this, yoi_fall_timer[mSubNumber] * 1.3f);
+#else
         mTimer1 = yoi_fall_timer[mSubNumber] * 1.3f;
+#endif
         step = daPy_getPlayerActorClass()->speedF + 30.0f;
         if (step > 50.0f) {
             step = 50.0f;
         }
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_pos_xz(this, &current.pos, getSingleFallPos(), step);
+#else
         cLib_chasePosXZ(&current.pos, getSingleFallPos(), step);
+#endif
     }
 }
 
@@ -440,21 +587,42 @@ void daB_YOI_c::executeSingleFall() {
         setWeight(200);
         mAngleSpeedY = 0;
         mMode = 10;
+#if TARGET_PC  // enemy attribute integration
+        mTimer2 = actor_attr::enemy_sync_timer(this, 20);
+#else
         mTimer2 = 20;
+#endif
         // fallthrough
 
     case 10:
+#if TARGET_PC  // enemy attribute integration
+        mTimer1 = actor_attr::enemy_sync_timer(this, yoi_fall_timer[mSubNumber] * 1.3f);
+        actor_attr::enemy_chase_action_pos_xz(this, &current.pos, getSingleFallPos(), 50.0f);
+#else
         mTimer1 = yoi_fall_timer[mSubNumber] * 1.3f;
         cLib_chasePosXZ(&current.pos, getSingleFallPos(), 50.0f);
+#endif
 
+#if TARGET_PC  // enemy attribute integration
+        if (mTimer2 + mTimer1 >= actor_attr::enemy_sync_timer(this, 20)) {
+            actor_attr::enemy_chase_action_float(this, &speed.y, 0.0f, 0.5f);
+            actor_attr::enemy_chase_action_float(this, &current.pos.y, 600.0f, 5.0f);
+#else
         if (mTimer2 + mTimer1 >= 20) {
             cLib_chaseF(&speed.y, 0.0f, 0.5f);
             cLib_chaseF(&current.pos.y, 600.0f, 5.0f);
+#endif
             mSoundObj.startLevelSound(Z2SE_EN_YO_ICE_MOVE, 0, -1);
         } else {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &speed.y, 15.0f, 5.0f);
+            actor_attr::enemy_chase_action_angle(this, &mAngleSpeedY, 0xC00, 0x100);
+            actor_attr::enemy_angle_add(this, shape_angle.y , mAngleSpeedY);
+#else
             cLib_chaseF(&speed.y, 15.0f, 5.0f);
             cLib_chaseAngleS(&mAngleSpeedY, 0xC00, 0x100);
             shape_angle.y += mAngleSpeedY;
+#endif
             mSoundObj.startLevelSound(Z2SE_EN_YO_ICE_ATTACK, 0, -1);
         }
 
@@ -467,17 +635,33 @@ void daB_YOI_c::executeSingleFall() {
         break;
 
     case 1:
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_pos_xz(this, &current.pos, getSingleFallPos(), 50.0f);
+#else
         cLib_chasePosXZ(&current.pos, getSingleFallPos(), 50.0f);
+#endif
 
+#if TARGET_PC  // enemy attribute integration
+        if (mTimer1 >= actor_attr::enemy_sync_timer(this, 20)) {
+            actor_attr::enemy_chase_action_float(this, &speed.y, 0.0f, 0.5f);
+            actor_attr::enemy_chase_action_float(this, &current.pos.y, 600.0f, 5.0f);
+#else
         if (mTimer1 >= 20) {
             cLib_chaseF(&speed.y, 0.0f, 0.5f);
             cLib_chaseF(&current.pos.y, 600.0f, 5.0f);
+#endif
             mSoundObj.startLevelSound(Z2SE_EN_YO_ICE_MOVE, 0, -1);
 
         } else {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &speed.y, 15.0f, 5.0f);
+            actor_attr::enemy_chase_action_angle(this, &mAngleSpeedY, 0xC00, 0x100);
+            actor_attr::enemy_angle_add(this, shape_angle.y , mAngleSpeedY);
+#else
             cLib_chaseF(&speed.y, 15.0f, 5.0f);
             cLib_chaseAngleS(&mAngleSpeedY, 0xC00, 0x100);
             shape_angle.y += mAngleSpeedY;
+#endif
             mSoundObj.startLevelSound(Z2SE_EN_YO_ICE_ATTACK, 0, -1);
 
             if (mTimer1 == 0) {
@@ -519,21 +703,39 @@ void daB_YOI_c::executeSingleFall() {
 
     case 2:
         mSoundObj.startLevelSound(Z2SE_EN_YO_ICE_ATTACK, 0, -1);
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_angle(this, &mAngleSpeedY, 0, 0x20);
+        actor_attr::enemy_angle_add(this, shape_angle.y , mAngleSpeedY);
+#else
         cLib_chaseAngleS(&mAngleSpeedY, 0, 0x20);
         shape_angle.y += mAngleSpeedY;
+#endif
 
+#if TARGET_PC  // enemy attribute integration
+        if (current.pos.y <= yoi_landing_start_height(this)) {
+#else
         if (current.pos.y <= 100.0f) {
+#endif
             mMode = 4;
             mTargetAngleX = cM_rndFX(0x800);
             shape_angle.y = cM_rndFX(0x8000);
+#if TARGET_PC  // enemy attribute integration
+            mTimer1 = actor_attr::enemy_sync_timer(this, 10);
+#else
             mTimer1 = 10;
+#endif
         }
         break;
 
     case 4:
         field_0x6ad = true;
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_angle(this, &mAngleSpeedY, 0, 0x20);
+        actor_attr::enemy_angle_add(this, shape_angle.y , mAngleSpeedY);
+#else
         cLib_chaseAngleS(&mAngleSpeedY, 0, 0x20);
         shape_angle.y += mAngleSpeedY;
+#endif
 
         if (current.pos.y < 0.0f) {
             dComIfGp_getVibration().StartShock(6, 0x1f, cXyz(0.0f, 1.0f, 0.0f));
@@ -545,11 +747,22 @@ void daB_YOI_c::executeSingleFall() {
 
     case 5:
         field_0x6ad = true;
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_angle(this, &mAngleSpeedY, 0, 0x20);
+        actor_attr::enemy_angle_add(this, shape_angle.y , mAngleSpeedY);
+        actor_attr::enemy_add_action_angle(this, &shape_angle.x, mTargetAngleX, 4, 0x400, 0x100);
+#else
         cLib_chaseAngleS(&mAngleSpeedY, 0, 0x20);
         shape_angle.y += mAngleSpeedY;
         cLib_addCalcAngleS(&shape_angle.x, mTargetAngleX, 4, 0x400, 0x100);
+#endif
 
+#if TARGET_PC  // enemy attribute integration
+        if (current.pos.y < yoi_embedded_height(this)) {
+            yoi_lock_embedded_height(this);
+#else
         if (current.pos.y < -200.0f) {
+#endif
             mAngleSpeedY = 0;
             if (daPy_getPlayerActorClass()->current.pos.absXZ() > 1700.0f) {
                 setWeight(200);
@@ -577,7 +790,11 @@ void daB_YOI_c::executeYose() {
     case 0:
         speed.y = 0.0f;
         speedF = 0.0f;
+#if TARGET_PC  // enemy attribute integration
+        mTimer1 = actor_attr::enemy_sync_timer(this, 90);
+#else
         mTimer1 = 90;
+#endif
         mMode = 5;
         // fallthrough
 
@@ -589,11 +806,20 @@ void daB_YOI_c::executeYose() {
         } else {
             setWeight(0xFD);
         }
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_angle(this, &shape_angle.x, 0, 0x40);
+        actor_attr::enemy_chase_action_angle(this, &shape_angle.z, 0, 0x40);
+#else
         cLib_chaseAngleS(&shape_angle.x, 0, 0x40);
         cLib_chaseAngleS(&shape_angle.z, 0, 0x40);
+#endif
         mWobbleAngle.x = cM_rndFX(0x40);
         mWobbleAngle.z = cM_rndFX(0x40);
+#if TARGET_PC  // enemy attribute integration
+        current.pos.y += actor_attr::enemy_move_step(this, 0.5f);
+#else
         current.pos.y += 0.5f;
+#endif
 
         if (mTimer1 == 0) {
             mSoundObj.startSound(Z2SE_EN_YO_ICE_PULLOUT, 0, -1);
@@ -611,11 +837,19 @@ void daB_YOI_c::executeYose() {
 
     case 7:
         mSoundObj.startLevelSound(Z2SE_EN_YO_ICE_MOVE, 0, -1);
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_angle(this, &mAngleSpeedY, 0, 0x40);
+        actor_attr::enemy_angle_add(this, shape_angle.y , mAngleSpeedY);
+        actor_attr::enemy_chase_action_angle(this, &shape_angle.x, 0, 0x40);
+        actor_attr::enemy_chase_action_angle(this, &shape_angle.z, 0, 0x40);
+        if (actor_attr::enemy_chase_action_float(this, &speed.y, 5.0f, 5.0f)) {
+#else
         cLib_chaseAngleS(&mAngleSpeedY, 0, 0x40);
         shape_angle.y += mAngleSpeedY;
         cLib_chaseAngleS(&shape_angle.x, 0, 0x40);
         cLib_chaseAngleS(&shape_angle.z, 0, 0x40);
         if (cLib_chaseF(&speed.y, 5.0f, 5.0f)) {
+#endif
             mMode = 8;
             mYoseSpeed = 0.0f;
         }
@@ -624,14 +858,29 @@ void daB_YOI_c::executeYose() {
     case 8:
     case 9:
         mSoundObj.startLevelSound(Z2SE_EN_YO_ICE_MOVE, 0, -1);
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_angle(this, &mAngleSpeedY, 0, 0x40);
+        actor_attr::enemy_angle_add(this, shape_angle.y , mAngleSpeedY);
+        actor_attr::enemy_chase_action_angle(this, &shape_angle.x, 0, 0x40);
+        actor_attr::enemy_chase_action_angle(this, &shape_angle.z, 0, 0x40);
+#else
         cLib_chaseAngleS(&mAngleSpeedY, 0, 0x40);
         shape_angle.y += mAngleSpeedY;
         cLib_chaseAngleS(&shape_angle.x, 0, 0x40);
         cLib_chaseAngleS(&shape_angle.z, 0, 0x40);
+#endif
         if (current.pos.y < 200.0f) {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &speed.y, 0.0f, 1.0f);
+#else
             cLib_chaseF(&speed.y, 0.0f, 1.0f);
+#endif
         } else {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &speed.y, -10.0f, 0.5f);
+#else
             cLib_chaseF(&speed.y, -10.0f, 0.5f);
+#endif
         }
         
         target.set(center_pos.x + range * cM_ssin(angle + mIcicleNo * 0x1999), current.pos.y,
@@ -641,8 +890,13 @@ void daB_YOI_c::executeYose() {
             target.x = 1600.0f * cM_ssin(target_angle);
             target.z = 1600.0f * cM_scos(target_angle);
         }
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_float(this, &mYoseSpeed, 75.0f, 1.0f);
+        actor_attr::enemy_add_action_calc_pos_xz2(this, &current.pos, target, 0.2f, mYoseSpeed);
+#else
         cLib_chaseF(&mYoseSpeed, 75.0f, 1.0f);
         cLib_addCalcPosXZ2(&current.pos, target, 0.2f, mYoseSpeed);
+#endif
 
         if (current.pos.absXZ(target) < 100.0f) {
             mpBlizzeta->onIceStatus(mIcicleNo);
@@ -662,18 +916,33 @@ void daB_YOI_c::executeYoseFall() {
 
     switch (mMode) {
     case 0:
+#if TARGET_PC  // enemy attribute integration
+        mTimer1 = actor_attr::enemy_sync_timer(this, 30);
+#else
         mTimer1 = 30;
+#endif
         mMode = 10;
         // fallthrough
 
     case 10:
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_float(this, &speed.y, 15.0f, 1.0f);
+        actor_attr::enemy_chase_action_angle(this, &mAngleSpeedY, 0xC00, 0x100);
+        actor_attr::enemy_angle_add(this, shape_angle.y , mAngleSpeedY);
+#else
         cLib_chaseF(&speed.y, 15.0f, 1.0f);
         cLib_chaseAngleS(&mAngleSpeedY, 0xC00, 0x100);
         shape_angle.y += mAngleSpeedY;
+#endif
         target.set(center_pos.x + range * cM_ssin(angle + mIcicleNo * 0x1999), current.pos.y,
                    center_pos.z + range * cM_scos(angle + mIcicleNo * 0x1999));
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_float(this, &mYoseSpeed, 100.0f, 1.0f);
+        actor_attr::enemy_add_action_calc_pos_xz2(this, &current.pos, target, 0.2f, mYoseSpeed);
+#else
         cLib_chaseF(&mYoseSpeed, 100.0f, 1.0f);
         cLib_addCalcPosXZ2(&current.pos, target, 0.2f, mYoseSpeed);
+#endif
 
         if (mTimer1 == 0) {
             speed.y = 0.0f;
@@ -687,19 +956,37 @@ void daB_YOI_c::executeYoseFall() {
     case 1:
     case 2:
     case 3:
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_angle(this, &mAngleSpeedY, 0, 0x20);
+        actor_attr::enemy_angle_add(this, shape_angle.y , mAngleSpeedY);
+#else
         cLib_chaseAngleS(&mAngleSpeedY, 0, 0x20);
         shape_angle.y += mAngleSpeedY;
+#endif
         target.set(center_pos.x + range * cM_ssin(angle + mIcicleNo * 0x1999), current.pos.y,
                    center_pos.z + range * cM_scos(angle + mIcicleNo * 0x1999));
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_float(this, &mYoseSpeed, 100.0f, 1.0f);
+        actor_attr::enemy_chase_action_pos_xz(this, &current.pos, target, mYoseSpeed);
+#else
         cLib_chaseF(&mYoseSpeed, 100.0f, 1.0f);
         cLib_chasePosXZ(&current.pos, target, mYoseSpeed);
+#endif
 
         if (mMode == 1) {
+#if TARGET_PC  // enemy attribute integration
+            if (current.pos.y <= yoi_landing_start_height(this)) {
+#else
             if (current.pos.y <= 100.0f) {
+#endif
                 mMode = 2;
                 mTargetAngleX = 0;
                 shape_angle.y = cM_rndFX(0x8000);
+#if TARGET_PC  // enemy attribute integration
+                mTimer1 = actor_attr::enemy_sync_timer(this, 10);
+#else
                 mTimer1 = 10;
+#endif
             }
         } else if (mMode == 2) {
             if (current.pos.y < 0.0f) {
@@ -709,8 +996,14 @@ void daB_YOI_c::executeYoseFall() {
                 mMode = 3;
             }
         } else {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_add_action_angle(this, &shape_angle.x, mTargetAngleX, 4, 0x400, 0x100);
+            if (current.pos.y < yoi_embedded_height(this)) {
+                yoi_lock_embedded_height(this);
+#else
             cLib_addCalcAngleS(&shape_angle.x, mTargetAngleX, 4, 0x400, 0x100);
             if (current.pos.y < -200.0f) {
+#endif
                 mpBlizzeta->onIceStatus(mIcicleNo);
                 speed.y = 0.0f;
                 speedF = 0.0f;
@@ -722,7 +1015,11 @@ void daB_YOI_c::executeYoseFall() {
         break;
 
     case 4:
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_add_action_angle(this, &shape_angle.x, mTargetAngleX, 4, 0x400, 0x100);
+#else
         cLib_addCalcAngleS(&shape_angle.x, mTargetAngleX, 4, 0x400, 0x100);
+#endif
         break;
     }
 }
@@ -732,7 +1029,11 @@ void daB_YOI_c::executeDemoRevival() {
     f32 range = mpBlizzeta->getIceRange();
     s16 angle = mpBlizzeta->getIceAngle();
     cXyz target;
+#if TARGET_PC  // enemy attribute integration
+    actor_attr::enemy_chase_action_float(this, &mScaleF, 1.0f, 0.1f);
+#else
     cLib_chaseF(&mScaleF, 1.0f, 0.1f);
+#endif
     target.set(center_pos.x + range * cM_ssin(angle + mIcicleNo * 0x1999), current.pos.y,
                center_pos.z + range * cM_scos(angle + mIcicleNo * 0x1999));
     
@@ -748,11 +1049,23 @@ void daB_YOI_c::executeDemoRevival() {
     case 1:
         mSoundObj.startLevelSound(Z2SE_EN_YO_ICE_MOVE, 0, -1);
         if (current.pos.y < 1000.0f) {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &speed.y, 10.0f, 0.5f);
+#else
             cLib_chaseF(&speed.y, 10.0f, 0.5f);
+#endif
         } else {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &speed.y, -10.0f, 0.5f);
+#else
             cLib_chaseF(&speed.y, -10.0f, 0.5f);
+#endif
         }
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_pos(this, &current.pos, target, 50.0f);
+#else
         cLib_chasePos(&current.pos, target, 50.0f);
+#endif
         break;
     }
 }
@@ -779,14 +1092,29 @@ void daB_YOI_c::executeDamage() {
         // fallthrough
 
     case 2:
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_angle(this, &mAngleSpeedY, 0, 0x40);
+        actor_attr::enemy_angle_add(this, shape_angle.y , mAngleSpeedY);
+        actor_attr::enemy_chase_action_angle(this, &shape_angle.x, 0, 0x40);
+        actor_attr::enemy_chase_action_angle(this, &shape_angle.z, 0, 0x40);
+#else
         cLib_chaseAngleS(&mAngleSpeedY, 0, 0x40);
         shape_angle.y += mAngleSpeedY;
         cLib_chaseAngleS(&shape_angle.x, 0, 0x40);
         cLib_chaseAngleS(&shape_angle.z, 0, 0x40);
+#endif
         if (current.pos.y < center_pos.y - 100.0f) {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &speed.y, 15.0f, 1.0f);
+#else
             cLib_chaseF(&speed.y, 15.0f, 1.0f);
+#endif
         } else {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_chase_action_float(this, &speed.y, -15.0f, 1.0f);
+#else
             cLib_chaseF(&speed.y, -15.0f, 1.0f);
+#endif
         }
 
         if (current.pos.absXZ() >= 1700.0f) {
@@ -814,7 +1142,11 @@ void daB_YOI_c::crack_execute() {
             mpCrackPos.set(current.pos.x, 1.0f, current.pos.z);
         }
     } else {
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_chase_action_float(this, &mCrackAlpha, 0.0f, 2.0f);
+#else
         cLib_chaseF(&mCrackAlpha, 0.0f, 2.0f);
+#endif
     }
 }
 
@@ -860,7 +1192,22 @@ void daB_YOI_c::action() {
     if (!field_0x6ad) {
         mCcStts.ClrCcMove();
     }
+#if TARGET_PC  // enemy attribute integration
+    /* Slow attributes may extend a fall, but fast attributes must not turn the
+       scripted icicle drop into a faster-than-vanilla hazard.  Use the engine's
+       vanilla vertical integrator while falling at a speed above 1x. */
+    const f32 actionSpeed = actor_attr::enemy_action_time_speed(this);
+    if (actionSpeed > 1.0f && speed.y < 0.0f) {
+        const f32 storedSpeedF = speedF;
+        speedF *= actionSpeed;
+#endif
     fopAcM_posMoveF(this, mCcStts.GetCCMoveP());
+#if TARGET_PC  // enemy attribute integration
+        speedF = storedSpeedF;
+    } else {
+        actor_attr::enemy_action_pos_move_f(this, mCcStts.GetCCMoveP());
+    }
+#endif
 
     if (mAction != ACT_DAMAGE && current.pos.absXZ() > 1600.0f) {
         s16 angle = cM_atan2s(current.pos.x, current.pos.z);
@@ -877,8 +1224,13 @@ void daB_YOI_c::action() {
 }
 
 void daB_YOI_c::mtx_set() {
+#if TARGET_PC  // enemy attribute integration
+    f32 scale_y = actor_attr::enemy_size_value(this, l_HIO.mScaleY * mScaleF);
+    f32 scale_xz = actor_attr::enemy_size_value(this, l_HIO.mScaleXZ * mScaleF);
+#else
     f32 scale_y = l_HIO.mScaleY * mScaleF;
     f32 scale_xz = l_HIO.mScaleXZ * mScaleF;
+#endif
 
     mDoMtx_stack_c::transS(current.pos);
     mDoMtx_stack_c::ZXYrotM(shape_angle + mWobbleAngle);
@@ -899,13 +1251,22 @@ void daB_YOI_c::cc_set() {
     mDoMtx_stack_c::multVecZero(&eyePos);
 
     mCcCyl2.SetC(current.pos);
+#if TARGET_PC  // enemy attribute integration
+    mCcCyl2.SetH(actor_attr::enemy_size_value(this, 550.0f));
+    mCcCyl2.SetR(actor_attr::enemy_size_value(this, 200.0f));
+#else
     mCcCyl2.SetH(550.0f);
     mCcCyl2.SetR(200.0f);
+#endif
     dComIfG_Ccsp()->Set(&mCcCyl2);
 
     mDoMtx_stack_c::transS(current.pos);
     mDoMtx_stack_c::ZXYrotM(shape_angle);
+#if TARGET_PC  // enemy attribute integration
+    mDoMtx_stack_c::transM(0.0f, actor_attr::enemy_size_value(this, mCcOffset + 100.0f), 0.0f);
+#else
     mDoMtx_stack_c::transM(0.0f, mCcOffset + 100.0f, 0.0f);
+#endif
     mDoMtx_stack_c::multVecZero(&center);
 
     f32 radius = 160.0f;
@@ -914,8 +1275,13 @@ void daB_YOI_c::cc_set() {
     }
 
     mCcCyl0.SetC(center);
+#if TARGET_PC  // enemy attribute integration
+    mCcCyl0.SetR(actor_attr::enemy_size_value(this, radius));
+    mCcCyl0.SetH(actor_attr::enemy_size_value(this, 400.0f - mCcOffset));
+#else
     mCcCyl0.SetR(radius);
     mCcCyl0.SetH(400.0f - mCcOffset);
+#endif
     dComIfG_Ccsp()->Set(&mCcCyl0);
 
     radius = 160.0f;
@@ -924,8 +1290,13 @@ void daB_YOI_c::cc_set() {
     }
 
     mCcCyl1.SetC(center);
+#if TARGET_PC  // enemy attribute integration
+    mCcCyl1.SetR(actor_attr::enemy_size_value(this, radius));
+    mCcCyl1.SetH(actor_attr::enemy_size_value(this, 400.0f - mCcOffset));
+#else
     mCcCyl1.SetR(radius);
     mCcCyl1.SetH(400.0f - mCcOffset);
+#endif
     dComIfG_Ccsp()->Set(&mCcCyl1);
 }
 
@@ -938,7 +1309,11 @@ int daB_YOI_c::execute() {
                 dCam_getBody()->ForceLockOff(this);
             }
             fopAcM_delete(this);
+#if TARGET_PC  // enemy attribute integration
+            mDeleteTimer = actor_attr::enemy_sync_u8_timer(this, 5);
+#else
             mDeleteTimer = 5;
+#endif
         }
 
         return 1;
@@ -1032,15 +1407,38 @@ cPhs_Step daB_YOI_c::create() {
         fopAcM_SetMtx(this, mpModel->getBaseTRMtx());
         fopAcM_SetMin(this, -200.0f, -200.0f, -200.0f);
         fopAcM_SetMax(this, 200.0f, 200.0f, 200.0f);
+#if TARGET_PC  // enemy attribute integration
+        health = actor_attr::enemy_health_value(this, 80);
+        field_0x560 = health;
+#else
         health = 80;
         field_0x560 = 80;
+#endif
 
         mCcStts.Init(0xfd, 0, this);
         mCcCyl0.Set(cc_yo_src);
+#if TARGET_PC  // enemy attribute integration
+        mCcCyl0.SetR(actor_attr::enemy_size_value(this, mCcCyl0.GetR()));
+        mCcCyl0.SetH(actor_attr::enemy_size_value(this, mCcCyl0.GetH()));
+        mCcCyl0.SetAtAtp(actor_attr::enemy_attack_power_byte(this, mCcCyl0.GetAtAtp()));
+#endif
         mCcCyl0.SetStts(&mCcStts);
+#if TARGET_PC  // enemy attribute integration
+        mCcCyl0.SetAtAtp(actor_attr::enemy_attack_power_byte(this, 2.0f));
+#endif
         mCcCyl1.Set(cc_yo_iron_src);
+#if TARGET_PC  // enemy attribute integration
+        mCcCyl1.SetR(actor_attr::enemy_size_value(this, mCcCyl1.GetR()));
+        mCcCyl1.SetH(actor_attr::enemy_size_value(this, mCcCyl1.GetH()));
+        mCcCyl1.SetAtAtp(actor_attr::enemy_attack_power_byte(this, mCcCyl1.GetAtAtp()));
+#endif
         mCcCyl1.SetStts(&mCcStts);
         mCcCyl2.Set(cc_yo_cam_src);
+#if TARGET_PC  // enemy attribute integration
+        mCcCyl2.SetR(actor_attr::enemy_size_value(this, mCcCyl2.GetR()));
+        mCcCyl2.SetH(actor_attr::enemy_size_value(this, mCcCyl2.GetH()));
+        mCcCyl2.SetAtAtp(actor_attr::enemy_attack_power_byte(this, mCcCyl2.GetAtAtp()));
+#endif
         mCcCyl2.SetStts(&mCcStts);
 
         mSoundObj.init(&current.pos, 2);

@@ -10,6 +10,40 @@
 #include "d/d_com_inf_game.h"
 #include "d/actor/d_a_player.h"
 #include "d/d_s_play.h"
+#if TARGET_PC  // additional actor attribute integration
+#include "dusk/mods/svc/actor_attribute_helpers.hpp"
+
+namespace actor_attr = dusk::mods::svc::actor_attr;
+
+namespace dusk::mods::svc::actor_attr {
+
+template <>
+struct EnemyActorAccessor<e_th_ball_class> {
+    static fopAc_ac_c* get(e_th_ball_class* i_this) {
+
+        return static_cast<fopAc_ac_c*>(i_this);
+
+}
+};
+
+template <>
+struct EnemyAttributeOwner<e_th_ball_class> {
+    static fopAc_ac_c* get(e_th_ball_class* i_this) {
+
+        fopAc_ac_c* actor = EnemyActorAccessor<e_th_ball_class>::get(i_this);
+        fopAc_ac_c* parent = fopAcM_SearchByID(fopAcM_GetLinkId(actor));
+
+        if (parent != NULL && fopAcM_GetName(parent) == fpcNm_E_TH_e) {
+            return parent;
+        }
+
+        return actor;
+
+}
+};
+
+}  // namespace dusk::mods::svc::actor_attr
+#endif
 
 enum daE_TH_ACTION {
     ACTION_STOP,
@@ -23,7 +57,11 @@ static e_th_class* master;
 
 static void chain_draw(e_th_ball_class* i_this) {
     fopAc_ac_c* a_this = (fopAc_ac_c*)i_this;
+#if TARGET_PC  // enemy attribute integration
+    const f32 size = (1.0f + XREG_F(0)) * actor_attr::enemy_size_multiplier(i_this);
+#else
     f32 size = 1.0f + XREG_F(0);
+#endif
 
     J3DModel* model_p;
     s16 rot_z;
@@ -102,13 +140,20 @@ static int daE_TH_BALL_Draw(e_th_ball_class* i_this) {
     g_env_light.settingTevStruct(0, &a_this->current.pos, &a_this->tevStr);
     g_env_light.setLightTevColorType_MAJI(i_this->mpBallModel, &a_this->tevStr);
     mDoExt_modelUpdateDL(i_this->mpBallModel);
+#if TARGET_PC  // enemy attribute integration
+    dComIfGd_setSimpleShadow(&a_this->current.pos, i_this->mAcch.GetGroundH(), (55.0f + AREG_F(11)) * actor_attr::enemy_size_multiplier(i_this), i_this->mAcch.m_gnd, 0, 1.0f, dDlst_shadowControl_c::getSimpleTex());
+#else
     dComIfGd_setSimpleShadow(&a_this->current.pos, i_this->mAcch.GetGroundH(), 55.0f + AREG_F(11), i_this->mAcch.m_gnd, 0, 1.0f, dDlst_shadowControl_c::getSimpleTex());
+#endif
     chain_draw(i_this);
     return 1;
 }
 
 static void chain_control_01(e_th_ball_class* i_this) {
     fopAc_ac_c* a_this = (fopAc_ac_c*)i_this;
+#if TARGET_PC  // enemy attribute integration
+    const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(i_this);
+#endif
     cXyz mae;
     cXyz ato;
     dBgS_GndChk gndchk;
@@ -121,7 +166,11 @@ static void chain_control_01(e_th_ball_class* i_this) {
     cXyz* pos_p = &chain_s->m_pos[1];
     csXyz* rot_p = &chain_s->m_rot[1];
     f32* var_r28 = &chain_s->field_0x6a4[1];
+#if TARGET_PC  // enemy attribute integration
+    f32 temp_f27 = (i_this->field_0xde4 - (20.0f - (20.0f * i_this->field_0xdd4))) * sizeMultiplier;
+#else
     f32 temp_f27 = i_this->field_0xde4 - (20.0f - (20.0f * i_this->field_0xdd4));
+#endif
 
     Vec sp3C;
     cXyz sp30;
@@ -130,7 +179,11 @@ static void chain_control_01(e_th_ball_class* i_this) {
     cMtx_XrotM(*calc_mtx, -cM_atan2s(mae.y, JMAFastSqrt((mae.x * mae.x) + (mae.z * mae.z))));
     mae.x = 0.0f;
     mae.y = 0.0f;
+#if TARGET_PC  // enemy attribute integration
+    mae.z = 1000.0f * i_this->field_0xdd4 * sizeMultiplier;
+#else
     mae.z = 1000.0f * i_this->field_0xdd4;
+#endif
     MtxPosition(&mae, &sp30);
     mae.z = 0.0f;
 
@@ -151,14 +204,22 @@ static void chain_control_01(e_th_ball_class* i_this) {
         cMtx_YrotS(*calc_mtx, rot_y);
         cMtx_XrotM(*calc_mtx, rot_x);
         if (i_this->field_0xdd0 == i - 1) {
+#if TARGET_PC  // enemy attribute integration
+            mae.z = (25.0f + XREG_F(2)) * sizeMultiplier;
+#else
             mae.z = 25.0f + XREG_F(2);
+#endif
         }
         MtxPosition(&mae, &ato);
         pos_p[0].x = pos_p[-1].x + ato.x;
         pos_p[0].y = pos_p[-1].y + ato.y;
         pos_p[0].z = pos_p[-1].z + ato.z;
 
+#if TARGET_PC  // enemy attribute integration
+        if ((actor_attr::enemy_action_phase_angle(i_this, i_this->mCounter , 1, i) & 15) == 0) {
+#else
         if (((i_this->mCounter + i) & 15) == 0) {
+#endif
             sp3C = *pos_p;
             sp3C.y += 200.0f;
             gndchk.SetPos(&sp3C);
@@ -176,6 +237,10 @@ static void chain_control_01(e_th_ball_class* i_this) {
 }
 
 static void chain_control_02(e_th_ball_class* i_this) {
+#if TARGET_PC  // enemy attribute integration
+
+    const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(i_this);
+#endif
     cXyz sp6C;
     cXyz sp60;
 
@@ -191,7 +256,11 @@ static void chain_control_02(e_th_ball_class* i_this) {
     cXyz sp54;
     sp6C.x = 0.0f;
     sp6C.y = 0.0f;
+#if TARGET_PC  // enemy attribute integration
+    sp6C.z = (25.0f + XREG_F(2)) * sizeMultiplier;
+#else
     sp6C.z = 25.0f + XREG_F(2);
+#endif
 
     cXyz sp48(0.0f, 0.0f, 0.0f);
     cXyz sp3C;
@@ -204,9 +273,17 @@ static void chain_control_02(e_th_ball_class* i_this) {
     for (i = 48; i >= 0; i--, pos_p--, rot_p--) {
         if (sp8) {
             cMtx_YrotS(*calc_mtx, a_this->current.angle.y);
+#if TARGET_PC  // enemy attribute integration
+            sp3C.x = (90.0f + VREG_F(7)) * sizeMultiplier * cM_ssin(i * (VREG_S(7) - 3600));
+#else
             sp3C.x = (90.0f + VREG_F(7)) * cM_ssin(i * (VREG_S(7) - 3600));
+#endif
             sp3C.y = 0.0f;
+#if TARGET_PC  // enemy attribute integration
+            sp3C.z = (-100.0f + VREG_F(8)) * sizeMultiplier;
+#else
             sp3C.z = -100.0f + VREG_F(8);
+#endif
             MtxPosition(&sp3C, &sp48);
         }
     
@@ -239,7 +316,11 @@ static void chain_control_02(e_th_ball_class* i_this) {
             if (var_f31 < 2048.0f) {
                 var_f31 = 2048.0f;
             }
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_add_action_angle(i_this, &rot_p->y, spA + 0x8000, 2, var_f31);
+#else
             cLib_addCalcAngleS2(&rot_p->y, spA + 0x8000, 2, var_f31);
+#endif
         }
     }
 }
@@ -261,6 +342,9 @@ static void chain_control_03(e_th_ball_class* i_this) {
 
 static void chain_control_11(e_th_ball_class* i_this) {
     fopAc_ac_c* a_this = (fopAc_ac_c*)i_this;
+#if TARGET_PC  // enemy attribute integration
+    const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(i_this);
+#endif
     cXyz sp48;
     cXyz sp3C;
     Vec sp30;
@@ -272,13 +356,21 @@ static void chain_control_11(e_th_ball_class* i_this) {
     cXyz* pos_p = &chain_s->m_pos[1];
     csXyz* rot_p = &chain_s->m_rot[1];
     f32* var_r28 = &chain_s->field_0x398[1];
+#if TARGET_PC  // enemy attribute integration
+    f32 temp_f27 = -20.0f * sizeMultiplier;
+#else
     f32 temp_f27 = -20.0f;
+#endif
 
     cXyz sp24;
     cMtx_YrotS(*calc_mtx, master->shape_angle.y);
     sp48.x = 0.0f;
     sp48.y = 0.0f;
+#if TARGET_PC  // enemy attribute integration
+    sp48.z = (10.0f + TREG_F(10)) * sizeMultiplier;
+#else
     sp48.z = 10.0f + TREG_F(10);
+#endif
     MtxPosition(&sp48, &sp24);
 
     sp48.x = 0.0f;
@@ -301,14 +393,22 @@ static void chain_control_11(e_th_ball_class* i_this) {
         cMtx_XrotM(*calc_mtx, spA);
 
         if (i_this->field_0xde8 == i - 1) {
+#if TARGET_PC  // enemy attribute integration
+            sp48.z = (25.0f + XREG_F(2)) * sizeMultiplier;
+#else
             sp48.z = 25.0f + XREG_F(2);
+#endif
         }
         MtxPosition(&sp48, &sp3C);
         pos_p[0].x = pos_p[-1].x + sp3C.x;
         pos_p[0].y = pos_p[-1].y + sp3C.y;
         pos_p[0].z = pos_p[-1].z + sp3C.z;
 
+#if TARGET_PC  // enemy attribute integration
+        if ((actor_attr::enemy_action_phase_angle(i_this, i_this->mCounter , 1, i) & 15) == 0) {
+#else
         if (((i_this->mCounter + i) & 15) == 0) {
+#endif
             sp30 = *pos_p;
             sp30.y += 200.0f;
             gndchk.SetPos(&sp30);
@@ -326,6 +426,10 @@ static void chain_control_11(e_th_ball_class* i_this) {
 }
 
 static void chain_control_12(e_th_ball_class* i_this) {
+#if TARGET_PC  // enemy attribute integration
+
+    const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(i_this);
+#endif
     cXyz sp20;
     cXyz sp14;
 
@@ -340,7 +444,11 @@ static void chain_control_12(e_th_ball_class* i_this) {
 
     sp20.x = 0.0f;
     sp20.y = 0.0f;
+#if TARGET_PC  // enemy attribute integration
+    sp20.z = (25.0f + XREG_F(2)) * sizeMultiplier;
+#else
     sp20.z = 25.0f + XREG_F(2);
+#endif
 
     for (i = 18; i >= 0; i--, pos_p--, rot_p--) {
         f32 temp_f31 = pos_p[0].x - pos_p[1].x;
@@ -380,6 +488,9 @@ static void chain_control_13(e_th_ball_class* i_this) {
 
 static void chain_control_21(e_th_ball_class* i_this) {
     fopAc_ac_c* a_this = (fopAc_ac_c*)i_this;
+#if TARGET_PC  // enemy attribute integration
+    const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(i_this);
+#endif
     int i;
     cXyz sp44;
     cXyz sp38;
@@ -393,14 +504,22 @@ static void chain_control_21(e_th_ball_class* i_this) {
     cXyz* var_r29 = &chain_s->field_0x230[1];
     csXyz* rot_p = &chain_s->m_rot[1];
     f32* var_r28 = &chain_s->field_0x398[1];
+#if TARGET_PC  // enemy attribute integration
+    f32 temp_f26 = -20.0f * sizeMultiplier;
+#else
     f32 temp_f26 = -20.0f;
+#endif
 
     cXyz sp20;
     sp44.x = 0.0f;
     sp44.y = 0.0f;
     sp44.z = 0.0f;
 
+#if TARGET_PC  // enemy attribute integration
+    f32 temp_f28 = actor_attr::action_damping(0.7f + XREG_F(5), actor_attr::enemy_action_time_speed(i_this));
+#else
     f32 temp_f28 = 0.7f + XREG_F(5);
+#endif
     for (i = 1; i < 20; i++, pos_p++, rot_p++, var_r29++, var_r28++) {
         f32 temp_f31 = var_r29[0].x + (pos_p[0].x - pos_p[-1].x);
         f32 temp_f27;
@@ -418,7 +537,11 @@ static void chain_control_21(e_th_ball_class* i_this) {
         cMtx_XrotM(*calc_mtx, spA);
 
         if (i_this->field_0x11d4 == i - 1) {
+#if TARGET_PC  // enemy attribute integration
+            sp44.z = (25.0f + XREG_F(2)) * sizeMultiplier;
+#else
             sp44.z = 25.0f + XREG_F(2);
+#endif
         }
         MtxPosition(&sp44, &sp38);
         *var_r29 = *pos_p;
@@ -434,7 +557,11 @@ static void chain_control_21(e_th_ball_class* i_this) {
         rot_p[-1].x = spA;
         rot_p[-1].y = sp8;
 
+#if TARGET_PC  // enemy attribute integration
+        if ((actor_attr::enemy_action_phase_angle(i_this, i_this->mCounter , 1, i) & 15) == 0) {
+#else
         if (((i_this->mCounter + i) & 15) == 0) {
+#endif
             sp2C = *pos_p;
             sp2C.y += 200.0f;
             gndchk.SetPos(&sp2C);
@@ -449,6 +576,9 @@ static void chain_control_21(e_th_ball_class* i_this) {
 
 static void normal_move(e_th_ball_class* i_this, s8 param_1) {
     fopAc_ac_c* a_this = (fopAc_ac_c*)i_this;
+#if TARGET_PC  // enemy attribute integration
+    const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(i_this);
+#endif
 
     cXyz sp30;
     cXyz sp24;
@@ -458,15 +588,31 @@ static void normal_move(e_th_ball_class* i_this, s8 param_1) {
     sp30.z = a_this->speedF;
     MtxPosition(&sp30, &sp24);
     sp24.y = a_this->speed.y;
+#if TARGET_PC  // enemy attribute integration
+    a_this->current.pos += actor_attr::enemy_move_step(i_this, sp24);
+#else
     a_this->current.pos += sp24;
+#endif
 
+#if TARGET_PC  // enemy attribute integration
+    a_this->speed.y -= actor_attr::enemy_gravity_step(i_this, 5.0f);
+#else
     a_this->speed.y -= 5.0f;
+#endif
     if (param_1 != 0) {
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_angle_add(i_this, a_this->current.angle.x, 200.0f * a_this->speedF);
+#else
         ANGLE_ADD(a_this->current.angle.x, 200.0f * a_this->speedF);
+#endif
     }
 
     f32 y_speed = a_this->speed.y;
+#if TARGET_PC  // enemy attribute integration
+    f32 temp_f31 = (47.0f + AREG_F(1)) * sizeMultiplier;
+#else
     f32 temp_f31 = 47.0f + AREG_F(1);
+#endif
     a_this->current.pos.y -= temp_f31;
     a_this->old.pos.y -= temp_f31;
 
@@ -481,11 +627,19 @@ static void normal_move(e_th_ball_class* i_this, s8 param_1) {
             i_this->mSound.startCollisionSE(Z2SE_HIT_HAMMER, dKy_pol_sound_get(&i_this->mAcch.m_gnd));
             
             cXyz sp18(a_this->current.pos);
+#if TARGET_PC  // enemy attribute integration
+            sp18.y -= 20.0f * sizeMultiplier;
+#else
             sp18.y -= 20.0f;
+#endif
             cXyz spC(2.0f, 2.0f, 2.0f);
         }
 
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_add_action_calc0(i_this, &a_this->speedF, 1.0f, 2.0f + TREG_F(17));
+#else
         cLib_addCalc0(&a_this->speedF, 1.0f, 2.0f + TREG_F(17));
+#endif
     }
 }
 
@@ -506,7 +660,11 @@ static void e_th_ball_stop(e_th_ball_class* i_this) {
         break;
     }
 
+#if TARGET_PC  // enemy attribute integration
+    actor_attr::enemy_add_action_calc0(i_this, &a_this->speedF, 1.0f, 1.0f + TREG_F(17));
+#else
     cLib_addCalc0(&a_this->speedF, 1.0f, 1.0f + TREG_F(17));
+#endif
     normal_move(i_this, 1);
 }
 
@@ -517,7 +675,11 @@ static void e_th_ball_spin(e_th_ball_class* i_this) {
     switch (i_this->mMode) {
     case 0:
         i_this->mMode = 1;
+#if TARGET_PC  // enemy attribute integration
+        i_this->mTimers[0] = actor_attr::enemy_sync_timer(i_this, 30);
+#else
         i_this->mTimers[0] = 30;
+#endif
         i_this->field_0x15c0 = 13.0f + YREG_F(16);
         i_this->speedF = 0.0f;
     case 1:
@@ -526,10 +688,19 @@ static void e_th_ball_spin(e_th_ball_class* i_this) {
         sp34 = i_this->current.pos - master->mHandR_Pos1;
 
         if (i_this->mTimers[0] != 0) {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_add_action_angle(i_this, &i_this->shape_angle.y, cM_atan2s(sp34.x, sp34.z), 1, 0xC00);
+            actor_attr::enemy_add_action_angle(i_this, &i_this->shape_angle.x, -cM_atan2s(sp34.y, JMAFastSqrt((sp34.x * sp34.x) + (sp34.z * sp34.z))), 1, 0xC00);
+#else
             cLib_addCalcAngleS2(&i_this->shape_angle.y, cM_atan2s(sp34.x, sp34.z), 1, 0xC00);
             cLib_addCalcAngleS2(&i_this->shape_angle.x, -cM_atan2s(sp34.y, JMAFastSqrt((sp34.x * sp34.x) + (sp34.z * sp34.z))), 1, 0xC00);
+#endif
 
+#if TARGET_PC  // enemy attribute integration
+            if (i_this->mTimers[0] == actor_attr::enemy_sync_timer(i_this, JREG_S(6) + 15)) {
+#else
             if (i_this->mTimers[0] == JREG_S(6) + 15) {
+#endif
                 i_this->field_0x15c4 = JREG_S(7) + 2500;
             }
         } else {
@@ -538,11 +709,21 @@ static void e_th_ball_spin(e_th_ball_class* i_this) {
             i_this->field_0x1a8c = 1;
         }
 
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_angle_add(i_this, i_this->shape_angle.z , i_this->field_0x15c4);
+#else
         i_this->shape_angle.z += i_this->field_0x15c4;
+#endif
 
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_add_action_angle(i_this, &i_this->field_0x15c4, 0, 1, JREG_S(8) + 25);
+        actor_attr::enemy_add_action_angle(i_this, &i_this->current.angle.y, 0, 1, 0x800);
+        actor_attr::enemy_add_action_angle(i_this, &i_this->current.angle.x, 0, 1, 0x800);
+#else
         cLib_addCalcAngleS2(&i_this->field_0x15c4, 0, 1, JREG_S(8) + 25);
         cLib_addCalcAngleS2(&i_this->current.angle.y, 0, 1, 0x800);
         cLib_addCalcAngleS2(&i_this->current.angle.x, 0, 1, 0x800);
+#endif
 
         if (master->field_0x68a & 1) {
             master->field_0x68a &= ~1;
@@ -552,7 +733,11 @@ static void e_th_ball_spin(e_th_ball_class* i_this) {
         if (i_this->mMode == 2) {
             i_this->field_0x15c0 = master->mpModelMorf->getFrame();
         } else {
+#if TARGET_PC  // enemy attribute integration
+            i_this->field_0x15c0 += master->mSpinAnmSpeed * actor_attr::enemy_action_time_speed(i_this);
+#else
             i_this->field_0x15c0 += master->mSpinAnmSpeed;
+#endif
             if (i_this->field_0x15c0 >= 29.0f) {
                 i_this->field_0x15c0 -= 29.0f;
             }
@@ -561,14 +746,27 @@ static void e_th_ball_spin(e_th_ball_class* i_this) {
         s16 spA = 65536.0f * (i_this->field_0x15c0 / (29.0f + AREG_F(9)));
         cMtx_YrotS(*calc_mtx, spA + master->shape_angle.y + AREG_S(0) + 15000);
         sp34.x = 0.0f;
+#if TARGET_PC  // enemy attribute integration
+        const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(i_this);
+        sp34.y = (-130.0f + AREG_F(8)) * sizeMultiplier;
+        sp34.z = (300.0f + AREG_F(10)) * sizeMultiplier;
+#else
         sp34.y = -130.0f + AREG_F(8);
         sp34.z = 300.0f + AREG_F(10);
+#endif
         MtxPosition(&sp34, &sp28);
 
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_add_action_calc2(i_this, &i_this->speedF, 1000.0f, 1.0f, 1.0f + YREG_F(15));
+        actor_attr::enemy_add_action_calc2(i_this, &i_this->current.pos.x, master->mHandR_Pos1.x + sp28.x, 0.5f, i_this->speedF);
+        actor_attr::enemy_add_action_calc2(i_this, &i_this->current.pos.y, master->mHandR_Pos1.y + sp28.y, 0.1f, 0.02f * i_this->speedF * master->mSpinAnmSpeed);
+        actor_attr::enemy_add_action_calc2(i_this, &i_this->current.pos.z, master->mHandR_Pos1.z + sp28.z, 0.5f, i_this->speedF);
+#else
         cLib_addCalc2(&i_this->speedF, 1000.0f, 1.0f, 1.0f + YREG_F(15));
         cLib_addCalc2(&i_this->current.pos.x, master->mHandR_Pos1.x + sp28.x, 0.5f, i_this->speedF);
         cLib_addCalc2(&i_this->current.pos.y, master->mHandR_Pos1.y + sp28.y, 0.1f, 0.02f * i_this->speedF * master->mSpinAnmSpeed);
         cLib_addCalc2(&i_this->current.pos.z, master->mHandR_Pos1.z + sp28.z, 0.5f, i_this->speedF);
+#endif
 
         if (master->field_0x68a & 2) {
             master->field_0x68a &= ~2;
@@ -585,7 +783,11 @@ static void e_th_ball_spin(e_th_ball_class* i_this) {
                 i_this->current.angle.y = master->shape_angle.y - 0x3000;
             }
 
+#if TARGET_PC  // enemy attribute integration
+            if (player->current.pos.y - master->current.pos.y > 50.0f * sizeMultiplier) {
+#else
             if (player->current.pos.y - master->current.pos.y > 50.0f) {
+#endif
                 i_this->speed.y = 40.0f + TREG_F(12);
             } else {
                 i_this->speed.y = 10.0f + TREG_F(16);
@@ -599,6 +801,9 @@ static void e_th_ball_spin(e_th_ball_class* i_this) {
 
 static s16 wall_angle_get(e_th_ball_class* i_this) {
     fopAc_ac_c* a_this = (fopAc_ac_c*)i_this;
+#if TARGET_PC  // enemy attribute integration
+    const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(i_this);
+#endif
     dBgS_LinChk linchk;
     cXyz sp28;
     cXyz sp1C;
@@ -607,12 +812,24 @@ static s16 wall_angle_get(e_th_ball_class* i_this) {
     cMtx_YrotS(*calc_mtx, a_this->current.angle.y);
     sp28.x = 0.0f;
     sp28.y = 0.0f;
+#if TARGET_PC  // enemy attribute integration
+    sp28.z = -50.0f * sizeMultiplier;
+#else
     sp28.z = -50.0f;
+#endif
     MtxPosition(&sp28, &sp1C);
     sp1C += a_this->current.pos;
+#if TARGET_PC  // enemy attribute integration
+    sp28.x = 5.0f * sizeMultiplier;
+#else
     sp28.x = 5.0f;
+#endif
     sp28.y = 0.0f;
+#if TARGET_PC  // enemy attribute integration
+    sp28.z = 200.0f * sizeMultiplier;
+#else
     sp28.z = 200.0f;
+#endif
 
     for (int i = 0; i < 2; i++) {
         MtxPosition(&sp28, &sp38[i]);
@@ -646,14 +863,27 @@ static void e_th_ball_shot(e_th_ball_class* i_this) {
         break;
     case 2:
         sp8 = 0;
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_add_action_calc2(i_this, &i_this->speedF, -25.0f, 1.0f, 15.0f + AREG_F(7));
+#else
         cLib_addCalc2(&i_this->speedF, -25.0f, 1.0f, 15.0f + AREG_F(7));
+#endif
         if (i_this->speedF > 0.0f) {
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_add_action_calc2(i_this, &i_this->field_0xde4, 100.0f + JREG_F(0), 1.0f, 30.0f + JREG_F(1));
+#else
             cLib_addCalc2(&i_this->field_0xde4, 100.0f + JREG_F(0), 1.0f, 30.0f + JREG_F(1));
+#endif
 
             sp28 = i_this->current.pos - master->mHandR_Pos1;
             s16 spE = cM_atan2s(sp28.x, sp28.z);
+#if TARGET_PC  // enemy attribute integration
+            actor_attr::enemy_add_action_angle(i_this, &i_this->shape_angle.y, spE, 1, 0x4000);
+            actor_attr::enemy_add_action_angle(i_this, &i_this->shape_angle.x, 0, 1, 0x4000);
+#else
             cLib_addCalcAngleS2(&i_this->shape_angle.y, spE, 1, 0x4000);
             cLib_addCalcAngleS2(&i_this->shape_angle.x, 0, 1, 0x4000);
+#endif
         } else if (temp_f31 > 0.0f) {
             ANGLE_ADD(i_this->current.angle.y, cM_rndFX(4000.0f));
             i_this->speed.y = 20.0f + AREG_F(5);
@@ -683,10 +913,18 @@ static void e_th_ball_shot(e_th_ball_class* i_this) {
 
         i_this->mAction = ACTION_RETURN;
         i_this->mMode = 0;
+#if TARGET_PC  // enemy attribute integration
+        i_this->mTimers[0] = actor_attr::enemy_sync_timer(i_this, 30);
+#else
         i_this->mTimers[0] = 30;
+#endif
     }
 
+#if TARGET_PC  // enemy attribute integration
+    if (i_this->mMode == 1 && i_this->field_0xdcc > (160.0f + AREG_F(3)) * actor_attr::enemy_size_multiplier(i_this)) {
+#else
     if (i_this->mMode == 1 && i_this->field_0xdcc > 160.0f + AREG_F(3)) {
+#endif
         i_this->mMode = 2;
     }
 }
@@ -714,13 +952,23 @@ static void e_th_ball_return(e_th_ball_class* i_this) {
         }
         break;
     case 1:
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_add_action_calc2(i_this, &i_this->speedF, -40.0f, 1.0f, 8.0f);
+        actor_attr::enemy_add_action_angle(i_this, &i_this->shape_angle.y, temp_r28, 1, 0x1000);
+        actor_attr::enemy_add_action_angle(i_this, &i_this->shape_angle.x, 0, 1, 0x1000);
+#else
         cLib_addCalc2(&i_this->speedF, -40.0f, 1.0f, 8.0f);
         cLib_addCalcAngleS2(&i_this->shape_angle.y, temp_r28, 1, 0x1000);
         cLib_addCalcAngleS2(&i_this->shape_angle.x, 0, 1, 0x1000);
+#endif
 
         sp8 = 0;
         i_this->current.angle.y = temp_r28;
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_add_action_angle(i_this, &i_this->current.angle.x, 0, 1, 0x1000);
+#else
         cLib_addCalcAngleS2(&i_this->current.angle.x, 0, 1, 0x1000);
+#endif
 
         if (i_this->speedF <= -40.0f) {
             i_this->speedF = -40.0f + BREG_F(15);
@@ -734,7 +982,11 @@ static void e_th_ball_return(e_th_ball_class* i_this) {
     case 2:
         i_this->current.angle.y = temp_r28;
 
+#if TARGET_PC  // enemy attribute integration
+        if (sp18.abs() < (80.0f + AREG_F(18)) * actor_attr::enemy_size_multiplier(i_this)) {
+#else
         if (sp18.abs() < 80.0f + AREG_F(18)) {
+#endif
             i_this->speed.y = 0.0f;
             i_this->speedF = 10.0f;
             i_this->mMode = 3;
@@ -755,12 +1007,24 @@ static void e_th_ball_return(e_th_ball_class* i_this) {
 }
 
 static void e_th_ball_end(e_th_ball_class* i_this) {
+#if TARGET_PC  // enemy attribute integration
+    actor_attr::enemy_add_action_calc0(i_this, &i_this->speedF, 1.0f, 1.0f + TREG_F(17));
+#else
     cLib_addCalc0(&i_this->speedF, 1.0f, 1.0f + TREG_F(17));
+#endif
     normal_move(i_this, 1);
     daPy_py_c::setLookPos(&i_this->current.pos);
+#if TARGET_PC  // enemy attribute integration
+    i_this->mCcSph.SetR(45.0f * actor_attr::enemy_size_multiplier(i_this));
+#else
     i_this->mCcSph.SetR(45.0f);
+#endif
 
+#if TARGET_PC  // enemy attribute integration
+    if (i_this->mDemoMode == 0 && fopAcM_searchPlayerDistance(i_this) < 130.0f * actor_attr::enemy_size_multiplier(i_this)) {
+#else
     if (i_this->mDemoMode == 0 && fopAcM_searchPlayerDistance(i_this) < 130.0f) {
+#endif
         dComIfGp_setDoStatusForce(0x35, 0);
         if (mDoCPd_c::getTrigA(PAD_1)) {
             i_this->mDemoMode = 1;
@@ -850,14 +1114,26 @@ static void action(e_th_ball_class* i_this) {
     i_this->mAtSph.SetC(at_sph_center);
     dComIfG_Ccsp()->Set(&i_this->mAtSph);
 
+#if TARGET_PC  // enemy attribute integration
+    actor_attr::enemy_add_action_calc2(i_this, &i_this->field_0xdc8, var_f30, 1.0f, var_f29);
+    actor_attr::enemy_add_action_calc2(i_this, &i_this->field_0xdd4, var_f31, 1.0f, var_f28);
+    actor_attr::enemy_add_action_calc0(i_this, &i_this->field_0xde4, 1.0f, 10.0f + JREG_F(1));
+#else
     cLib_addCalc2(&i_this->field_0xdc8, var_f30, 1.0f, var_f29);
     cLib_addCalc2(&i_this->field_0xdd4, var_f31, 1.0f, var_f28);
     cLib_addCalc0(&i_this->field_0xde4, 1.0f, 10.0f + JREG_F(1));
+#endif
 
     if (i_this->field_0x15c6 == 0) {
         cXyz sp2C = i_this->current.pos - master->mHandR_Pos1;
+#if TARGET_PC  // enemy attribute integration
+
+        const f32 relativeDistance = sp2C.abs() / actor_attr::enemy_size_multiplier(i_this);
+        s16 var_r27 = i_this->field_0xdc8 * (50.0f - ((0.035f + XREG_F(3)) * relativeDistance));
+#else
         
         s16 var_r27 = i_this->field_0xdc8 * (50.0f - ((0.035f + XREG_F(3)) * sp2C.abs()));
+#endif
         if (var_r27 < 0) {
             var_r27 = 0;
         } else if (var_r27 > 45) {
@@ -870,7 +1146,11 @@ static void action(e_th_ball_class* i_this) {
         } else {
             sp8 = 2;
         }
+#if TARGET_PC  // enemy attribute integration
+        actor_attr::enemy_add_action_angle(i_this, &i_this->field_0xdd0, var_r27, 1, sp8);
+#else
         cLib_addCalcAngleS2(&i_this->field_0xdd0, var_r27, 1, sp8);
+#endif
     }
 
     i_this->field_0x15c6 = 0;
@@ -886,7 +1166,11 @@ static void action(e_th_ball_class* i_this) {
 
     if (i_this->field_0x658 == 0) {
         if (i_this->mCcSph.ChkTgHit()) {
+#if TARGET_PC  // enemy attribute integration
+            i_this->field_0x658 = actor_attr::enemy_sync_timer(i_this, 10);
+#else
             i_this->field_0x658 = 10;
+#endif
             def_se_set(&i_this->mSound, i_this->mCcSph.GetTgHitObj(), 0x28, NULL);
         }
 
@@ -906,8 +1190,14 @@ static void action(e_th_ball_class* i_this) {
 
                     master->mAction = ACTION_RETURN;
                     master->mMode = 2;
+#if TARGET_PC  // enemy attribute integration
+                    master->mTimers[0] = actor_attr::enemy_sync_timer(i_this, JREG_S(4) + 30);
+                    const actor_attr::ActionAnimationParams params = actor_attr::action_animation_params(10.0f, 1.0f, actor_attr::enemy_action_time_speed(i_this));
+                    master->mpModelMorf->setAnm((J3DAnmTransform*)dComIfG_getObjectRes("E_th", 0x1B), 2, params.morph, params.playbackSpeed, 0.0f, -1.0f);
+#else
                     master->mTimers[0] = JREG_S(4) + 30;
                     master->mpModelMorf->setAnm((J3DAnmTransform*)dComIfG_getObjectRes("E_th", 0x1B), 2, 10.0f, 1.0f, 0.0f, -1.0f);
+#endif
                     master->mAnm = 0x1B;
                 }
             } else if (i_this->mAction == ACTION_SHOT && i_this->speedF > 0.0f && fopAcM_GetName(at_hit_actor) == fpcNm_E_MD_e) {
@@ -979,12 +1269,18 @@ static int daE_TH_BALL_Execute(e_th_ball_class* i_this) {
 
     action(i_this);
 
+#if TARGET_PC  // enemy attribute integration
+    const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(i_this);
+#endif
     mDoMtx_stack_c::transS(i_this->current.pos.x, i_this->current.pos.y, i_this->current.pos.z);
     mDoMtx_stack_c::YrotM(i_this->current.angle.y);
     mDoMtx_stack_c::XrotM(i_this->current.angle.x);
     mDoMtx_stack_c::YrotM(i_this->shape_angle.y);
     mDoMtx_stack_c::XrotM(i_this->shape_angle.x - 0x4000);
     mDoMtx_stack_c::YrotM(-i_this->current.angle.y + i_this->shape_angle.z);
+#if TARGET_PC  // enemy attribute integration
+    mDoMtx_stack_c::scaleM(sizeMultiplier, sizeMultiplier, sizeMultiplier);
+#endif
     mDoMtx_stack_c::transM(0.0f, 55.0f + XREG_F(4), 0.0f);
     i_this->mpBallModel->setBaseTRMtx(mDoMtx_stack_c::get());
 
@@ -1072,8 +1368,14 @@ static int daE_TH_BALL_Create(fopAc_ac_c* a_this) {
         OS_REPORT("//////////////E_TH_BALL SET 2 !!\n");
 
         fopAcM_SetMtx(i_this, i_this->mpBallModel->getBaseTRMtx());
+#if TARGET_PC  // enemy attribute integration
+        const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(i_this);
+        fopAcM_SetMin(i_this, -2000.0f * sizeMultiplier, -1000.0f * sizeMultiplier, -2000.0f * sizeMultiplier);
+        fopAcM_SetMax(i_this, 2000.0f * sizeMultiplier, 1000.0f * sizeMultiplier, 2000.0f * sizeMultiplier);
+#else
         fopAcM_SetMin(i_this, -2000.0f, -1000.0f, -2000.0f);
         fopAcM_SetMax(i_this, 2000.0f, 1000.0f, 2000.0f);
+#endif
         
         i_this->mCcStts.Init(0xF0, 0, i_this);
 
@@ -1103,13 +1405,24 @@ static int daE_TH_BALL_Create(fopAc_ac_c* a_this) {
 
         i_this->mCcSph.Set(cc_sph_src);
         i_this->mCcSph.SetStts(&i_this->mCcStts);
+#if TARGET_PC  // enemy attribute integration
+        i_this->mCcSph.SetR(55.0f * sizeMultiplier);
+#endif
         i_this->mAtSph.Set(at_sph_src);
         i_this->mAtSph.SetStts(&i_this->mCcStts);
+#if TARGET_PC  // enemy attribute integration
+        i_this->mAtSph.SetR(55.0f * sizeMultiplier);
+        i_this->mAtSph.SetAtAtp(actor_attr::enemy_attack_power_byte(i_this, 4.0f));
+#endif
 
         i_this->mSound.init(&i_this->current.pos, NULL, 3, 1);
 
         i_this->mAcch.Set(fopAcM_GetPosition_p(a_this), fopAcM_GetOldPosition_p(a_this), a_this, 1, &i_this->mAcchCir, fopAcM_GetSpeed_p(a_this), NULL, NULL);
+#if TARGET_PC  // enemy attribute integration
+        i_this->mAcchCir.SetWall(50.0f * sizeMultiplier, 50.0f * sizeMultiplier);
+#else
         i_this->mAcchCir.SetWall(50.0f, 50.0f);
+#endif
 
         daE_TH_BALL_Execute(i_this);
     }
