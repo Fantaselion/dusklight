@@ -1516,6 +1516,7 @@ set(DUSK_FILES
         src/dusk/mods/svc/actor_attribute.cpp
         src/dusk/mods/svc/actor_attribute.hpp
         src/dusk/mods/svc/actor_attribute_helpers.hpp
+		src/dusk/mods/svc/actor_attribute_swept_acch.hpp
         src/dusk/mods/svc/audio_res/audio_res.hpp
         src/dusk/mods/svc/audio_res/audio_res.cpp
         src/dusk/mods/svc/audio_res/bst.cpp

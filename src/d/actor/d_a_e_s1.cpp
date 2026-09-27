@@ -17,6 +17,7 @@
 #if TARGET_PC  // additional actor attribute integration
 #include "dusk/settings.h"
 #include "dusk/mods/svc/actor_attribute_helpers.hpp"
+#include "dusk/mods/svc/actor_attribute_swept_acch.hpp"
 #endif
 #include <cstring>
 
@@ -1832,6 +1833,9 @@ static void action(e_s1_class* i_this) {
 #endif
     MtxPosition(&mae, &ato);
 
+#if TARGET_PC  // enemy attribute integration
+    const cXyz movementStart = a_this->current.pos;
+#endif
     a_this->speed.x = ato.x;
     a_this->speed.z = ato.z;
     a_this->current.pos += a_this->speed;
@@ -1876,6 +1880,9 @@ static void action(e_s1_class* i_this) {
             a_this->current.pos.z += ccmove->z;
         }
     }
+#if TARGET_PC  // enemy attribute integration
+    actor_attr::enemy_swept_ground_correct(i_this, i_this->mAcch, movementStart);
+#endif
 }
 
 static void ke_set(e_s1_class* i_this) {

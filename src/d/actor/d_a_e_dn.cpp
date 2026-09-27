@@ -18,6 +18,7 @@
 #include "d/d_cc_d.h"
 #if TARGET_PC  // additional actor attribute integration
 #include "dusk/mods/svc/actor_attribute_helpers.hpp"
+#include "dusk/mods/svc/actor_attribute_swept_acch.hpp"
 #include "f_op/f_op_actor_enemy.h"
 #else
 #include "d/d_bomb.h"
@@ -3403,6 +3404,9 @@ static void action(e_dn_class* i_this) {
     cLib_addCalcAngleS2(&actor->shape_angle.z, actor->current.angle.z, 2, 0x2000);
 #endif
 
+#if TARGET_PC  // enemy attribute integration
+    const cXyz movementStart = actor->current.pos;
+#endif
     if (i_this->field_0x5d8 != 0) {
         cMtx_YrotS(*calc_mtx, i_this->cur_angle_y_target);
         cMtx_XrotM(*calc_mtx, i_this->field_0x5d6);
@@ -3510,6 +3514,9 @@ static void action(e_dn_class* i_this) {
         }
     }
 
+#if TARGET_PC  // enemy attribute integration
+    actor_attr::enemy_swept_ground_correct(i_this, i_this->objacch, movementStart);
+#endif
     s16 sp14, sp12, max_step;
     sp14 = 0;
     sp12 = 0;

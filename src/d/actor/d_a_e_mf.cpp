@@ -18,6 +18,7 @@
 #if TARGET_PC  // additional actor attribute integration
 #include "d/d_com_inf_game.h"
 #include "dusk/mods/svc/actor_attribute_helpers.hpp"
+#include "dusk/mods/svc/actor_attribute_swept_acch.hpp"
 #else
 #include "Z2AudioLib/Z2Instances.h"
 #endif
@@ -3206,6 +3207,9 @@ static void action(e_mf_class* i_this) {
     cLib_addCalcAngleS2(&a_this->shape_angle.z, a_this->current.angle.z, 2, 0x2000);
 #endif
 
+#if TARGET_PC  // enemy attribute integration
+    const cXyz movementStart = a_this->current.pos;
+#endif
     if (i_this->field_0x5d8 != 0) {
         cMtx_YrotS(*calc_mtx, i_this->field_0x5d4);
         cMtx_XrotM(*calc_mtx, i_this->field_0x5d6);
@@ -3313,6 +3317,9 @@ static void action(e_mf_class* i_this) {
         }
     }
 
+#if TARGET_PC  // enemy attribute integration
+    actor_attr::enemy_swept_ground_correct(i_this, i_this->mObjAcch, movementStart);
+#endif
     sVar1 = 0x800;
     if (i_this->field_0x6e0 != 0) {
         i_this->field_0x6e0--;

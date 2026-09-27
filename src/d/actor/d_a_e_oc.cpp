@@ -23,6 +23,7 @@
 #include "d/d_com_inf_game.h"
 #if TARGET_PC  // additional actor attribute integration
 #include "dusk/mods/svc/actor_attribute_helpers.hpp"
+#include "dusk/mods/svc/actor_attribute_swept_acch.hpp"
 #else
 #include "SSystem/SComponent/c_math.h"
 #include "d/actor/d_a_obj_rotBridge.h"
@@ -3196,6 +3197,9 @@ void daE_OC_c::action() {
     const cXyz movementStart = current.pos;
     oc_pos_move_f(this, mStts.GetCCMoveP());
     oc_sweep_knockback_ground(this, mAcch, movementStart);
+    if (getActionMode() != E_OC_ACTION_BIG_DAMAGE || actor_attr::enemy_size_multiplier(this) <= 1.0f) {
+        actor_attr::enemy_swept_ground_correct(this, mAcch, movementStart);
+    }
 #else
     fopAcM_posMoveF(this, mStts.GetCCMoveP());
 #endif

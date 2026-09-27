@@ -7,6 +7,7 @@
 #if TARGET_PC  // additional actor attribute integration
 
 #include "dusk/mods/svc/actor_attribute_helpers.hpp"
+#include "dusk/mods/svc/actor_attribute_swept_acch.hpp"
 
 namespace actor_attr = dusk::mods::svc::actor_attr;
 #endif
@@ -539,11 +540,13 @@ void e_ai_class::e_ai_damage() {
             if (m_timers[1] == 0) {
                 m_sound.startCreatureSound(Z2SE_EN_AI_FLASH, 0, -1);
                 mpEmitter = dComIfGp_particle_set(0x81ED, &current.pos, &tevStr, &shape_angle, NULL);
+                if (mpEmitter != NULL) {
 #if TARGET_PC  // enemy attribute integration
-                cXyz effectScale = actor_attr::enemy_size_multiplier(this, 1.0f);
-                mpEmitter->setGlobalScale(effectScale);
+                    cXyz effectScale = actor_attr::enemy_size_multiplier(this, 1.0f);
+                    mpEmitter->setGlobalScale(effectScale);
 #endif
-                mpEmitter->becomeImmortalEmitter();
+                    mpEmitter->becomeImmortalEmitter();
+                }
 #if TARGET_PC  // enemy attribute integration
                 m_timers[1] = actor_attr::enemy_sync_timer(this, 1000);
                 m_timers[2] = actor_attr::enemy_sync_timer(this, 56);
@@ -987,6 +990,9 @@ void e_ai_class::action() {
     MtxPosition(&sp14, &sp8);
     speed.x = sp8.x;
     speed.z = sp8.z;
+#if TARGET_PC  // enemy attribute integration
+    const cXyz movementStart = current.pos;
+#endif
     current.pos += speed;
     speed.y += gravity;
 
@@ -1015,6 +1021,9 @@ void e_ai_class::action() {
         }
     }
 
+#if TARGET_PC  // enemy attribute integration
+    actor_attr::enemy_swept_ground_correct(this, m_acch, movementStart);
+#endif
     m_acch.CrrPos(dComIfG_Bgsp());
 }
 

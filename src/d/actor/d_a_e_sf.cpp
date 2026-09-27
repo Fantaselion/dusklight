@@ -9,6 +9,7 @@
 #if TARGET_PC  // additional actor attribute integration
 
 #include "dusk/mods/svc/actor_attribute_helpers.hpp"
+#include "dusk/mods/svc/actor_attribute_swept_acch.hpp"
 
 namespace actor_attr = dusk::mods::svc::actor_attr;
 
@@ -1460,6 +1461,9 @@ static void action(e_sf_class* i_this) {
     MtxPosition(&spcc, &spd8);
     a_this->speed.x = spd8.x;
     a_this->speed.z = spd8.z;
+#if TARGET_PC  // enemy attribute integration
+    const cXyz movementStart = a_this->current.pos;
+#endif
     a_this->current.pos += a_this->speed * l_HIO.basic_size;
     a_this->speed.y += a_this->gravity;
 #if TARGET_PC  // enemy attribute integration
@@ -1503,6 +1507,9 @@ static void action(e_sf_class* i_this) {
 #endif
     }
 
+#if TARGET_PC  // enemy attribute integration
+    actor_attr::enemy_swept_ground_correct(i_this, i_this->mBgc, movementStart);
+#endif
     i_this->mBgc.CrrPos(dComIfG_Bgsp());
 
     if (i_this->field_0x6ae > 0) {

@@ -4092,12 +4092,13 @@ static s8 e_wb_c_run(e_wb_class* i_this) {
         yaa = 0x200;
         i_this->target_ya = cM_atan2s(start.x, start.z);
 
-        if (rider && rider->anm == 39) {
-            ANGLE_ADD(i_this->target_ya,
+                if (rider && rider->anm == 39) {
 #if TARGET_PC  // enemy attribute integration
-                      (BREG_F(16) + 5000.0f) * cM_ssin(actor_attr::enemy_action_phase_angle(i_this, i_this->counter , BREG_S(7) + 0x3E8)));
+            ANGLE_ADD(i_this->target_ya,
+                (BREG_F(16) + 5000.0f) * cM_ssin(actor_attr::enemy_action_phase_angle(i_this, i_this->counter, BREG_S(7) + 0x3E8)));
 #else
-                      (BREG_F(16) + 5000.0f) * cM_ssin(i_this->counter * (BREG_S(7) + 0x3E8)));
+            ANGLE_ADD(i_this->target_ya,
+                (BREG_F(16) + 5000.0f) * cM_ssin(i_this->counter * (BREG_S(7) + 0x3E8)));
 #endif
             yaa = 0x400;
         } else if (wall_check != 0) {
