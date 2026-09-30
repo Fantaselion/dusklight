@@ -25,70 +25,76 @@
 #if TARGET_PC  // additional actor attribute integration
 #include <limits>
 
+#include "d/actor/d_a_b_gnd.h"
 #include "d/actor/d_a_e_rd.h"
 #include "dusk/dusk.h"
 #include "dusk/mods/svc/actor_attribute_helpers.hpp"
 #include "f_pc/f_pc_manager.h"
 
 namespace {
-struct HorseKingBulblinSearch {
+struct HorseMountedEncounterSearch {
     e_rd_class* king = nullptr;
-    fpc_ProcID lowestId = fpcM_ERROR_PROCESS_ID_e;
+    b_gnd_class* ganondorf = nullptr;
+    fpc_ProcID lowestKingId = fpcM_ERROR_PROCESS_ID_e;
+    fpc_ProcID lowestGanondorfId = fpcM_ERROR_PROCESS_ID_e;
 };
 
-void* horseKingBulblinSearch(void* actorPtr, void* data) {
+void* horseMountedEncounterSearch(void* actorPtr, void* data) {
+    if (actorPtr == nullptr || !fopAcM_IsActor(actorPtr)) {
+        return nullptr;
+    }
 
-    if (actorPtr == nullptr || !fopAcM_IsActor(actorPtr) || fopAcM_GetName(actorPtr) != fpcNm_E_RD_e) {
+    auto* search = static_cast<HorseMountedEncounterSearch*>(data);
+    const fpc_ProcID id = fopAcM_GetID(actorPtr);
+    if (fopAcM_GetName(actorPtr) == fpcNm_B_GND_e) {
+        auto* ganondorf = static_cast<b_gnd_class*>(actorPtr);
+        // Ganondorf's scripted intro/ending horse movement keeps its authored
+        // timing. Inherit his clock only while the mounted fight is active.
+        if (!ganondorf->checkRide() || ganondorf->mNoDrawTimer != 0 || ganondorf->mDemoCamMode != 0 || dComIfGp_event_runCheck()) {
+            return nullptr;
+        }
+        if (search->ganondorf == nullptr || id < search->lowestGanondorfId) {
+            search->ganondorf = ganondorf;
+            search->lowestGanondorfId = id;
+        }
+        return nullptr;
+    }
+    if (fopAcM_GetName(actorPtr) != fpcNm_E_RD_e) {
         return nullptr;
     }
 
     auto* king = static_cast<e_rd_class*>(actorPtr);
-
-    // Mounted King Bulblin encounters:
-    // 1 = first field encounter
-    // 2 = Bridge of Eldin
-    // 3 = Lake Hylia Bridge
-    // 4 = Hyrule Castle (not a horseback encounter for Epona)
+    // Mounted King Bulblin encounters: field, Eldin, and Lake Hylia bridges.
+    // Hyrule Castle (actor_set 4) is not a horseback encounter for Epona.
     if (king->actor_set < 1 || king->actor_set > 3) {
         return nullptr;
     }
-
-    auto* search = static_cast<HorseKingBulblinSearch*>(data);
-    const fpc_ProcID id = fopAcM_GetID(king);
-
-    // Duplicated encounters can contain several Kings. Use the oldest/lowest
-    // process ID so Epona follows one stable encounter master rather than
-    // whichever copy the actor iterator happens to visit first.
-    if (search->king == nullptr || id < search->lowestId) {
+    // Keep one stable master if an encounter contains duplicated bosses.
+    if (search->king == nullptr || id < search->lowestKingId) {
         search->king = king;
-        search->lowestId = id;
+        search->lowestKingId = id;
     }
-
     return nullptr;
 }
 
-f32 horseKingBulblinSpeedMultiplier() {
-
-    // Do not bypass inheritance during events. Scripted and player-controlled
-    // horse movement must stay on the same King Bulblin movement clock.
-    HorseKingBulblinSearch search;
-    fpcM_Search(horseKingBulblinSearch, &search);
-
-    if (search.king == nullptr) {
-        return 1.0f;
+f32 horseMountedEncounterSpeedMultiplier() {
+    HorseMountedEncounterSearch search;
+    fpcM_Search(horseMountedEncounterSearch, &search);
+    f32 speedMultiplier = 1.0f;
+    if (search.king != nullptr) {
+        // Preserve King Bulblin's existing inheritance during his events.
+        speedMultiplier = std::max(speedMultiplier, dusk::mods::svc::actor_attr::resolve_multiplier(&search.king->enemy, ACTOR_ATTRIBUTE_MOVEMENT_SPEED));
     }
-
-    const f32 speedMultiplier = dusk::mods::svc::actor_attr::resolve_multiplier(&search.king->enemy, ACTOR_ATTRIBUTE_MOVEMENT_SPEED);
-
-    // This is deliberately a horse-local minimum. King Bulblin keeps his
-    // complete randomized movement-speed range, while Epona never becomes
-    // slower than her vanilla movement/action clock.
-    return std::max(1.0f, speedMultiplier);
+    if (search.ganondorf != nullptr) {
+        speedMultiplier = std::max(speedMultiplier, dusk::mods::svc::actor_attr::resolve_multiplier(search.ganondorf, ACTOR_ATTRIBUTE_MOVEMENT_SPEED));
+    }
+    // Epona never becomes slower than her vanilla movement/action clock.
+    return speedMultiplier;
 }
 
 f32 horseKingBulblinAcceleration(f32 vanilla) {
 
-    const f32 speedMultiplier = horseKingBulblinSpeedMultiplier();
+    const f32 speedMultiplier = horseMountedEncounterSpeedMultiplier();
 
     // Velocity target is scaled by M. Acceleration/deceleration must scale by
     // M^2 so reaching that target takes 1/M as many frames, matching the
@@ -98,23 +104,23 @@ f32 horseKingBulblinAcceleration(f32 vanilla) {
 
 f32 horseKingBulblinSpeedValue(f32 vanilla) {
 
-    return vanilla * horseKingBulblinSpeedMultiplier();
+    return vanilla * horseMountedEncounterSpeedMultiplier();
 }
 
 s16 horseKingBulblinTimer(s16 vanillaFrames) {
 
-    return dusk::mods::svc::actor_attr::sync_timer(vanillaFrames, horseKingBulblinSpeedMultiplier());
+    return dusk::mods::svc::actor_attr::sync_timer(vanillaFrames, horseMountedEncounterSpeedMultiplier());
 }
 }  // namespace
 
 f32 daHorse_c::getKingBulblinEncounterSpeedMultiplier() const {
 
-    return horseKingBulblinSpeedMultiplier();
+    return horseMountedEncounterSpeedMultiplier();
 }
 
 static s16 horseKingBulblinTurnStep(s16 vanilla) {
 
-    const f32 speed = horseKingBulblinSpeedMultiplier();
+    const f32 speed = horseMountedEncounterSpeedMultiplier();
 
     if (speed == 1.0f || vanilla == 0) {
         return vanilla;
@@ -125,7 +131,7 @@ static s16 horseKingBulblinTurnStep(s16 vanilla) {
 
 static s16 horseKingBulblinTurnDivisor(s16 vanilla) {
 
-    const f32 speed = horseKingBulblinSpeedMultiplier();
+    const f32 speed = horseMountedEncounterSpeedMultiplier();
 
     if (speed == 1.0f) {
         return vanilla;
