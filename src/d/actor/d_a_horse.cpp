@@ -3522,7 +3522,7 @@ void daHorse_c::setLashCnt() {
             mDoAud_seStart(Z2SE_WHIP_HORSE, NULL, 0, 0);
 
             if (!checkStateFlg0(FLG0_PLAYER_BACK_RIDE_LASH)) {
-                //m_lashCnt--;
+                m_lashCnt--;
                 if (m_lashCnt == 0) {
                     m_lashRecoverTime = DUSK_IF_ELSE(horseKingBulblinTimer(m_hio->m.full_spur_recovery_time), m_hio->m.full_spur_recovery_time);
                 } else {

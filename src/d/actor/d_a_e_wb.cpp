@@ -2276,7 +2276,8 @@ static void e_wb_b_ikki(e_wb_class* i_this) {
 
 #if TARGET_PC  // enemy attribute integration
     actor_attr::enemy_add_action_angle(i_this, &actor->current.angle.y, i_this->target_ya, 2, angle);
-    actor_attr::enemy_add_action_angle(i_this, &i_this->field_0x7a4, local_d8, 8, static_cast<s16>(i_this->acceleration + 10000.0f));
+    const actor_attr::ActionAngleParams followTurn = actor_attr::action_angle_params(8, static_cast<s16>(i_this->acceleration + 10000.0f), 1.0f / actor_attr::safe_action_speed(actor_attr::enemy_action_time_speed(i_this)));
+    cLib_addCalcAngleS2(&i_this->field_0x7a4, local_d8, followTurn.divisor, followTurn.maximumStep);
     actor_attr::enemy_add_action_calc2(i_this, &actor->speedF, speed, 1.0f, acceleration);
 #else
     cLib_addCalcAngleS2(&actor->current.angle.y, i_this->target_ya, 2, angle);
@@ -2550,7 +2551,8 @@ static void e_wb_b_ikki2(e_wb_class* i_this) {
 
 #if TARGET_PC  // enemy attribute integration
     actor_attr::enemy_add_action_angle(i_this, &actor->current.angle.y, i_this->target_ya, 2, angle);
-    actor_attr::enemy_add_action_angle(i_this, &i_this->field_0x7a4, local_b8, 8, static_cast<s16>(i_this->acceleration + 10000.0f));
+    const actor_attr::ActionAngleParams followTurn = actor_attr::action_angle_params(8, static_cast<s16>(i_this->acceleration + 10000.0f), 1.0f / actor_attr::safe_action_speed(actor_attr::enemy_action_time_speed(i_this)));
+    cLib_addCalcAngleS2(&i_this->field_0x7a4, local_b8, followTurn.divisor, followTurn.maximumStep);
     actor_attr::enemy_add_action_calc2(i_this, &actor->speedF, target_speed, 1.0f, acceleration);
 #else
     cLib_addCalcAngleS2(&actor->current.angle.y, i_this->target_ya, 2, angle);
