@@ -956,7 +956,7 @@ void daE_HP_c::action() {
 #if TARGET_PC  // enemy attribute integration
     const s16 hoverPhase = (mAction == 5 && movemode == 10) ? 0 : field_0x7a8;
 
-    field_0x768 = field_0x7a4 + actor_attr::enemy_size_value(this, 20.0f + NREG_F(4)) * cM_ssin(actor_attr::enemy_action_phase_angle(this, hoverPhase, 1000.0f + NREG_F(3)));
+    field_0x768 = field_0x7a4 + (20.0f + NREG_F(4)) * cM_ssin(actor_attr::enemy_action_phase_angle(this, hoverPhase, 1000.0f + NREG_F(3)));
 #else
     field_0x768 = field_0x7a4 + (20.0f + NREG_F(4)) * cM_ssin((f32)field_0x7a8 * (1000.0f + NREG_F(3)));
 #endif
@@ -1388,11 +1388,10 @@ int daE_HP_c::create() {
 #if TARGET_PC  // enemy attribute integration
         health = actor_attr::enemy_health_value(this, 40.0f);
         field_0x560 = health;
-		field_0x7a4 = actor_attr::enemy_size_value(this, JREG_F(0) + 170.0f);
 #else
         field_0x560 = health = 40;
-		field_0x7a4 = JREG_F(0) + 170.0f;
 #endif
+field_0x7a4 = JREG_F(0) + 170.0f;
         field_0x72c.set(current.pos);
         field_0x75c.set(current.pos);
 

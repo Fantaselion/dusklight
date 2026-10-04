@@ -785,6 +785,7 @@ static int daE_KG_Create(fopAc_ac_c* i_this) {
         IF_DUSK(a_this->mSph.SetAtAtp(actor_attr::enemy_attack_power_byte(a_this, 2.0f));)
         a_this->mAcch.Set(fopAcM_GetPosition_p(i_this), fopAcM_GetOldPosition_p(i_this), i_this,
                           1, &a_this->mAcchCir, fopAcM_GetSpeed_p(i_this), NULL, NULL);
+        IF_DUSK(a_this->mAcch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
         const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(a_this);
         a_this->mAcchCir.SetWall(50.0f * sizeMultiplier, 50.0f * sizeMultiplier);

@@ -711,6 +711,8 @@ static int daE_Fs_Execute(e_fs_class* i_this) {
         center.x += 20000.0f;
     }
     i_this->mCcCyl.SetC(center);
+    IF_DUSK(i_this->mCcCyl.SetR(actor_attr::enemy_size_value(i_this, 80.0f));)
+    IF_DUSK(i_this->mCcCyl.SetH(actor_attr::enemy_size_value(i_this, 230.0f));)
     dComIfG_Ccsp()->Set(&i_this->mCcCyl);
 
     mDoMtx_stack_c::transS(a_this->current.pos.x, a_this->current.pos.y, a_this->current.pos.z);
@@ -895,6 +897,7 @@ static cPhs_Step daE_Fs_Create(fopAc_ac_c* i_this) {
 
         _this->mAcch.Set(fopAcM_GetPosition_p(i_this), fopAcM_GetOldPosition_p(i_this), i_this, 1,
                          &_this->mAcchCir, fopAcM_GetSpeed_p(i_this), NULL, NULL);
+        IF_DUSK(_this->mAcch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
         _this->mAcchCir.SetWall(50.0f * actor_attr::enemy_size_multiplier(i_this), 100.0f * actor_attr::enemy_size_multiplier(i_this));
 #else
