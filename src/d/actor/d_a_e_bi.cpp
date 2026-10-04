@@ -69,6 +69,12 @@ static s16 bi_stun_bomb_timer(e_bi_class* i_this, f32 vanillaFrames) {
     return actor_attr::duration_timer(vanillaFrames, bi_bomb_duration_multiplier(i_this));
 }
 
+/* Ignited bomb bugs keep vanilla gravity, including their water sink. */
+static f32 bi_gravity_step(e_bi_class* i_this, f32 vanillaStep) {
+
+    return i_this->ignition_time != 0 ? vanillaStep : actor_attr::enemy_gravity_step(i_this, vanillaStep);
+}
+
 /* Picking up, hookshotting, or boomeranging a Bomb Bug replaces it with an
    NBOMB actor.  NBOMB uses its model's base scale instead of actor.scale for
    rendering, so transfer the size to both representations. */
@@ -450,13 +456,13 @@ static void e_bi_ex(e_bi_class* i_this) {
             i_this->field_0x6a2 = 0;
             i_this->field_0x6a4 = (3800.0f + JREG_F(5)) * rnd;
             i_this->field_0x6a8 = rnd * 20.0f;
-            actor->speed.y = DUSK_IF_ELSE(actor_attr::enemy_move_step(i_this, 23.0f), 23.0f);
+            actor->speed.y = 23.0f;
             break;
 
         case 1:
             if (i_this->ObjAcch.ChkGroundHit()) {
                 i_this->mode = 2;
-                actor->speed.y = DUSK_IF_ELSE(actor_attr::enemy_move_step(i_this, 10.0f), 10.0f);
+                actor->speed.y = 10.0f;
             }
             // fallthrough
         case 2:
@@ -556,10 +562,10 @@ static void e_bi_water(e_bi_class* i_this) {
             if (i_this->timer[0] == 0) {
                 i_this->anm_p->setPlaySpeed(0.0f);
                 actor->current.pos.y += actor->speed.y;
-                actor->speed.y -= DUSK_IF_ELSE(actor_attr::enemy_gravity_step(i_this, 0.1f), 0.1f);
+                actor->speed.y -= DUSK_IF_ELSE(bi_gravity_step(i_this, 0.1f), 0.1f);
 
 #if TARGET_PC  // enemy attribute integration
-            const f32 terminalSpeed = -actor_attr::enemy_gravity_step(i_this, 2.0f);
+            const f32 terminalSpeed = -bi_gravity_step(i_this, 2.0f);
             if (actor->speed.y < terminalSpeed) {
                 actor->speed.y = terminalSpeed;
 #else
@@ -737,7 +743,7 @@ static void action(e_bi_class* i_this) {
         actor->speed.x = ato.x;
         actor->speed.z = ato.z;
         actor->current.pos += actor->speed;
-        actor->speed.y -= DUSK_IF_ELSE(actor_attr::enemy_gravity_step(i_this, 5.0f), 5.0f);
+        actor->speed.y -= DUSK_IF_ELSE(bi_gravity_step(i_this, 5.0f), 5.0f);
         i_this->ObjAcch.CrrPos(dComIfG_Bgsp());
     }
 
@@ -896,7 +902,7 @@ static int daE_BI_Execute(e_bi_class* i_this) {
             mDoMtx_stack_c::YrotM(fw_p->actor.shape_angle.y);
             mDoMtx_stack_c::XrotM(fw_p->actor.shape_angle.x + fw_p->field_0x5a4);
             mDoMtx_stack_c::ZrotM(fw_p->actor.shape_angle.z);
-            mDoMtx_stack_c::transM(i_this->field_0xbb0.x, DUSK_IF_ELSE(i_this->field_0xbb0.y * sizeMultiplier, i_this->field_0xbb0.y), i_this->field_0xbb0.z);
+            mDoMtx_stack_c::transM(i_this->field_0xbb0.x, i_this->field_0xbb0.y, i_this->field_0xbb0.z);
 
             mae.set(0.0f, 0.0f, 0.0f);
             mDoMtx_stack_c::multVec(&mae, &actor->current.pos);

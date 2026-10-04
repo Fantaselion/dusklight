@@ -1236,6 +1236,7 @@ static int daE_BU_Create(fopAc_ac_c* i_this) {
         }
 
         a_this->acch.Set(fopAcM_GetPosition_p(i_this), fopAcM_GetOldPosition_p(i_this), i_this, 1, &a_this->acchcir, fopAcM_GetSpeed_p(i_this), NULL, NULL);
+        IF_DUSK(a_this->acch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
         a_this->acchcir.SetWall(55.0f * actor_attr::enemy_size_multiplier(i_this), 55.0f * actor_attr::enemy_size_multiplier(i_this));
 #else

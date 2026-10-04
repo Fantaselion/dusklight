@@ -7,7 +7,6 @@
 #if TARGET_PC  // additional actor attribute integration
 
 #include "dusk/mods/svc/actor_attribute_helpers.hpp"
-#include "dusk/mods/svc/actor_attribute_swept_acch.hpp"
 
 namespace actor_attr = dusk::mods::svc::actor_attr;
 #endif
@@ -784,9 +783,6 @@ void e_ai_class::action() {
     MtxPosition(&sp14, &sp8);
     speed.x = sp8.x;
     speed.z = sp8.z;
-#if TARGET_PC  // enemy attribute integration
-    const cXyz movementStart = current.pos;
-#endif
     current.pos += speed;
     speed.y += gravity;
 
@@ -811,7 +807,6 @@ void e_ai_class::action() {
         }
     }
 
-    IF_DUSK(actor_attr::enemy_swept_ground_correct(this, m_acch, movementStart);)
     m_acch.CrrPos(dComIfG_Bgsp());
 }
 
@@ -1025,6 +1020,7 @@ int e_ai_class::Create() {
         initCcCylinder();
 
         m_acch.Set(fopAcM_GetPosition_p(this), fopAcM_GetOldPosition_p(this), this, 1, &m_acchcir, fopAcM_GetSpeed_p(this), NULL, NULL);
+        IF_DUSK(m_acch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
         m_acchcir.SetWall(100.0f * sizeMultiplier, 150.0f * sizeMultiplier);
 #else

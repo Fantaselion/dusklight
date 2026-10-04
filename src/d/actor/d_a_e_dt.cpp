@@ -2707,6 +2707,7 @@ cPhs_Step daE_DT_c::create() {
 #endif
     mAcch.Set(fopAcM_GetPosition_p(this), fopAcM_GetOldPosition_p(this), this, 1, &mAcchCir,
               fopAcM_GetSpeed_p(this), NULL, NULL);
+    IF_DUSK(mAcch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
     mAcchCir.SetWall((50.0f) * actor_attr::enemy_size_multiplier(this), (500.0f) * actor_attr::enemy_size_multiplier(this));
     health = actor_attr::enemy_health_value(this, 400.0f);

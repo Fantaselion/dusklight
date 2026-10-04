@@ -18,7 +18,6 @@
 #include "d/d_cc_d.h"
 #if TARGET_PC  // additional actor attribute integration
 #include "dusk/mods/svc/actor_attribute_helpers.hpp"
-#include "dusk/mods/svc/actor_attribute_swept_acch.hpp"
 #include "f_op/f_op_actor_enemy.h"
 #else
 #include "d/d_bomb.h"
@@ -160,15 +159,6 @@ struct EnemyActorAccessor<e_dn_class> {
 };
 
 }  // namespace dusk::mods::svc::actor_attr
-
-static f32 dn_size_neutral_move_step(e_dn_class* i_this, f32 vanillaStep) {
-
-    const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(i_this);
-    if (sizeMultiplier > 0.0f) {
-        vanillaStep /= sizeMultiplier;
-    }
-    return actor_attr::enemy_move_step(i_this, vanillaStep);
-}
 
 #endif
 daE_DN_HIO_c::daE_DN_HIO_c() {
@@ -1589,7 +1579,7 @@ static void e_dn_gakejump(e_dn_class* i_this) {
                 anm_init(i_this, ANM_JUMP_B, 5.0f, J3DFrameCtrl::EMode_NONE, 1.0f);
             }
 
-            if (sp24.abs() < (DUSK_IF_ELSE(dn_size_neutral_move_step(i_this, actor->speedF), actor->speedF) * 1.1f)) {
+            if (sp24.abs() < (DUSK_IF_ELSE(actor_attr::enemy_move_step(i_this, actor->speedF), actor->speedF) * 1.1f)) {
                 actor->current.pos = i_this->field_0x5bc;
                 anm_init(i_this, ANM_JUMP_C, 1.0f, J3DFrameCtrl::EMode_NONE, 1.0f);
                 i_this->mode = 4;
@@ -2848,15 +2838,12 @@ static void action(e_dn_class* i_this) {
     cLib_addCalcAngleS2(&actor->shape_angle.z, actor->current.angle.z, 2, 0x2000);
 #endif
 
-#if TARGET_PC  // enemy attribute integration
-    const cXyz movementStart = actor->current.pos;
-#endif
     if (i_this->field_0x5d8 != 0) {
         cMtx_YrotS(*calc_mtx, i_this->cur_angle_y_target);
         cMtx_XrotM(*calc_mtx, i_this->field_0x5d6);
         work.x = 0.0f;
         work.y = 0.0f;
-        work.z = DUSK_IF_ELSE(dn_size_neutral_move_step(i_this, actor->speedF), actor->speedF);
+        work.z = DUSK_IF_ELSE(actor_attr::enemy_move_step(i_this, actor->speedF), actor->speedF);
         MtxPosition(&work, &sp24c);
         actor->current.pos += sp24c;
         work = i_this->field_0x5bc - i_this->field_0x5c8;
@@ -2885,7 +2872,7 @@ static void action(e_dn_class* i_this) {
             actor->gravity = -4.0f;
         } else {
             cMtx_YrotS(*calc_mtx, actor->current.angle.y);
-            work.z = DUSK_IF_ELSE(dn_size_neutral_move_step(i_this, actor->speedF), actor->speedF);
+            work.z = DUSK_IF_ELSE(actor_attr::enemy_move_step(i_this, actor->speedF), actor->speedF);
         }
         work.x = 0.0f;
         work.y = 0.0f;
@@ -2934,7 +2921,6 @@ static void action(e_dn_class* i_this) {
         }
     }
 
-    IF_DUSK(actor_attr::enemy_swept_ground_correct(i_this, i_this->objacch, movementStart);)
     s16 sp14, sp12, max_step;
     sp14 = 0;
     sp12 = 0;
@@ -3853,6 +3839,8 @@ static cPhs_Step daE_DN_Create(fopAc_ac_c* actor) {
 
         i_this->objacch.Set(fopAcM_GetPosition_p(actor), fopAcM_GetOldPosition_p(actor), actor, 1,
                              &i_this->acchcir, fopAcM_GetSpeed_p(actor), NULL, NULL);
+        // Check below the raised wall circle without rewinding horizontal movement.
+        IF_DUSK(i_this->objacch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
         i_this->acchcir.SetWall(80.0f * sizeMultiplier, 100.0f * sizeMultiplier);
 #else

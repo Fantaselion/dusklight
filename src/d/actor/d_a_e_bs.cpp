@@ -9,7 +9,6 @@
 #if TARGET_PC  // additional actor attribute integration
 
 #include "dusk/mods/svc/actor_attribute_helpers.hpp"
-#include "dusk/mods/svc/actor_attribute_swept_acch.hpp"
 
 namespace actor_attr = dusk::mods::svc::actor_attr;
 
@@ -623,9 +622,6 @@ static void action(e_bs_class* i_this) {
     actor->speed.x = sp48.x;
     actor->speed.z = sp48.z;
 
-#if TARGET_PC  // enemy attribute integration
-    const cXyz movementStart = actor->current.pos;
-#endif
     actor->current.pos += actor->speed * l_HIO.base_size;
     actor->speed.y += actor->gravity;
     actor->gravity = DUSK_IF_ELSE(actor_attr::enemy_signed_gravity_step(i_this, -5.0f), -5.0f);
@@ -657,7 +653,6 @@ static void action(e_bs_class* i_this) {
         DUSK_IF_ELSE(actor_attr::enemy_add_action_calc0(i_this, &i_this->field_0x6b8, 1.0f, 7.0f + TREG_F(12)), cLib_addCalc0(&i_this->field_0x6b8, 1.0f, 7.0f + TREG_F(12)));
     }
 
-    IF_DUSK(actor_attr::enemy_swept_ground_correct(i_this, i_this->acch, movementStart);)
     i_this->acch.CrrPos(dComIfG_Bgsp());
 
     s16 spC = 0;
@@ -951,6 +946,7 @@ static int daE_BS_Create(fopAc_ac_c* i_this) {
         fopAcM_SetMtx(i_this, a_this->modelMorf->getModel()->getBaseTRMtx());
 
         a_this->acch.Set(fopAcM_GetPosition_p(i_this), fopAcM_GetOldPosition_p(i_this), i_this, 1, &a_this->acchcir, fopAcM_GetSpeed_p(i_this), NULL, NULL);
+        IF_DUSK(a_this->acch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
         const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(a_this);
         a_this->acchcir.SetWall(80.0f * sizeMultiplier, 100.0f * sizeMultiplier);
