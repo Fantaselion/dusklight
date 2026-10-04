@@ -132,11 +132,11 @@ static s16 fish_hits_per_mount(b_ob_class* i_this) {
 
 // Keep Morpheel's ride window proportional to the number of stabs Link is
 // allowed to perform during that mount.  Vanilla is 4 hits, so this leaves
-// all timing unchanged at vanilla health and expands/contracts the window
-// by the same ratio as fish_hits_per_mount().
+// at least vanilla timing so low health still allows a stab, and expands
+// the window for higher hit counts by the same ratio as fish_hits_per_mount().
 static s16 fish_hang_time_for_hits(b_ob_class* i_this, f32 vanillaFrames) {
 
-    return actor_attr::positive_s16(vanillaFrames * ((f32)fish_hits_per_mount(i_this) / 4.0f));
+    return actor_attr::positive_s16(vanillaFrames * std::max((f32)fish_hits_per_mount(i_this) / 4.0f, 1.0f));
 }
 
 static s16 fish_mount_count(b_ob_class* i_this) {
@@ -1040,7 +1040,11 @@ static void core_action(b_ob_class* i_this) {
 
     if (check_eat && i_this->mDemoAction == 0) {
         sp30 = dComIfGp_getPlayer(0)->current.pos - a_this->home.pos;
+#if TARGET_PC
+		if (JMAFastSqrt(sp30.x * sp30.x + sp30.z * sp30.z) < DUSK_IF_ELSE(actor_attr::enemy_size_value(i_this, VREG_F(17) + 300.0f), VREG_F(17) + 300.0f) && sp30.y < DUSK_IF_ELSE((VREG_F(18) + 800.0f) * (1.0f + (actor_attr::enemy_size_multiplier(i_this) - 1.0f) * 0.5f), VREG_F(18) + 800.0f)) {
+#else
         if (JMAFastSqrt(sp30.x * sp30.x + sp30.z * sp30.z) < (VREG_F(17) + 300.0f) && sp30.y < (VREG_F(18) + 800.0f)) {
+#endif
             i_this->mDemoAction = 50;
         }
     }
@@ -2472,11 +2476,11 @@ static void demo_camera(b_ob_class* i_this) {
             i_this->mDemoActionTimer = 0;
 
             sp64 = a_this->home.pos;
-            sp64.y += KREG_F(13) + 400.0f;
+            sp64.y += DUSK_IF_ELSE(actor_attr::enemy_size_value(i_this, KREG_F(13) + 400.0f), KREG_F(13) + 400.0f);
             player->setPlayerPosAndAngle(&sp64, &tentacle->field_0x1f74);
 
-            daPy_getPlayerActorClass()->setThrowDamage(a_this->home.angle.y, 10.0f,
-                                                       KREG_F(14) + 30.0f, 4, 1, 2);
+            daPy_getPlayerActorClass()->setThrowDamage(a_this->home.angle.y, DUSK_IF_ELSE(actor_attr::enemy_size_value(i_this, 10.0f) * actor_attr::enemy_action_time_speed(i_this), 10.0f),
+                                                       DUSK_IF_ELSE((KREG_F(14) + 30.0f) * JMAFastSqrt(actor_attr::enemy_size_multiplier(i_this)), KREG_F(14) + 30.0f), 4, 1, 2);
             daPy_getPlayerActorClass()->changeDemoMode(1, 0, 0, 0);
         }
         break;
@@ -2491,7 +2495,7 @@ static void demo_camera(b_ob_class* i_this) {
         cLib_addCalc2(&i_this->mDemoCamCenter.z, player->current.pos.z, 0.4f, 300.0f);
 #endif
 
-        if (i_this->mBodyParts[0].mpMorf->isStop()) {
+        if (i_this->mBodyParts[0].mpMorf->isStop() || DUSK_IF_ELSE(actor_attr::enemy_action_time_speed(i_this) < 1.0f && i_this->mDemoActionTimer >= i_this->mBodyParts[0].mpMorf->getEndFrame() - 153.0f, false)) {
             i_this->mDemoAction = 100;
             i_this->mCoreAnm = BCK_OI_WAIT;
             i_this->mCoreAnmMode = J3DFrameCtrl::EMode_LOOP;
@@ -2569,7 +2573,7 @@ static void demo_camera(b_ob_class* i_this) {
             cLib_addCalc2(&i_this->field_0x5d00, 700.0f, 0.1f, 200.0f);
 #endif
 
-            if (i_this->mDemoActionTimer > DUSK_IF_ELSE(actor_attr::enemy_sync_timer(i_this, 170), 170)) {
+            if (i_this->mDemoActionTimer > DUSK_IF_ELSE(std::min<int>(actor_attr::enemy_sync_timer(i_this, 170), actor_attr::enemy_sync_timer(i_this, 138) + 32), 170)) {
                 i_this->mDemoAction = 100;
             }
 
@@ -3355,11 +3359,11 @@ static void demo_camera(b_ob_class* i_this) {
                 i_this->mDemoActionTimer = 0;
 
                 sp64 = a_this->home.pos;
-                sp64.y += KREG_F(13) + 400.0f;
+                sp64.y += DUSK_IF_ELSE(actor_attr::enemy_size_value(i_this, KREG_F(13) + 400.0f), KREG_F(13) + 400.0f);
                 player->setPlayerPosAndAngle(&sp64, 0, 0);
 
-                daPy_getPlayerActorClass()->setThrowDamage(a_this->home.angle.y, 10.0f,
-                                                           KREG_F(14) + 30.0f, 4, 1, 2);
+                daPy_getPlayerActorClass()->setThrowDamage(a_this->home.angle.y, DUSK_IF_ELSE(actor_attr::enemy_size_value(i_this, 10.0f) * actor_attr::enemy_action_time_speed(i_this), 10.0f),
+                                                           DUSK_IF_ELSE((KREG_F(14) + 30.0f) * JMAFastSqrt(actor_attr::enemy_size_multiplier(i_this)), KREG_F(14) + 30.0f), 4, 1, 2);
                 daPy_getPlayerActorClass()->changeDemoMode(1, 0, 0, 0);
             }
         }
@@ -3389,7 +3393,7 @@ static void demo_camera(b_ob_class* i_this) {
 #endif
         }
 
-        if (i_this->mDemoAction == 52 && i_this->mBodyParts[0].mpMorf->isStop()) {
+        if (i_this->mDemoAction == 52 && (i_this->mBodyParts[0].mpMorf->isStop() || DUSK_IF_ELSE(actor_attr::enemy_action_time_speed(i_this) < 1.0f && i_this->mDemoActionTimer >= i_this->mBodyParts[0].mpMorf->getEndFrame() - 153.0f, false))) {
             i_this->mDemoAction = 100;
             i_this->mCoreAnm = BCK_OI_WAIT;
             i_this->mCoreAnmMode = J3DFrameCtrl::EMode_LOOP;

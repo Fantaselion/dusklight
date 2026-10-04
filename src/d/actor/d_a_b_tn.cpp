@@ -5331,6 +5331,7 @@ int daB_TN_c::create() {
             fopAcM_SetMax(this, 200.0f, 200.0f, 200.0f);
 
             mAcch.Set(&current.pos, &old.pos, this, 1, &mAcchCir, &speed, NULL, NULL);
+            IF_DUSK(mAcch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
             mAcchCir.SetWall(actor_attr::enemy_size_value(this, 60.0f), actor_attr::enemy_size_value(this, 300.0f));
             health = actor_attr::enemy_health_value(this, 0x50);
@@ -5394,6 +5395,7 @@ int daB_TN_c::create() {
             for (int k = 0; k < 16; k++) {
                 mAcchArr[k].Set(&mPositions[k], &mPositionsCopy[k], this, 1, &mAcchCirArr[k],
                                 &field_0x8dc[k], NULL, NULL);
+                IF_DUSK(mAcchArr[k].m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
                 mAcchCirArr[k].SetWall(actor_attr::enemy_size_value(this, 10.0f), actor_attr::enemy_size_value(this, 50.0f));
 #else

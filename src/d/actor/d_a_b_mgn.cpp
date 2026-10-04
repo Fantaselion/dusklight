@@ -1272,7 +1272,7 @@ void daB_MGN_c::executeCircle() {
         calcJointAngle(var_r28);
 
         if (mMoveMode == 2) {
-            if (field_0xa9c == 0 && current.pos.abs(player_pos) > DUSK_IF_ELSE(actor_attr::enemy_size_value(this, 2000.0f), 2000.0f)) {
+            if (field_0xa9c == 0 && current.pos.abs(player_pos) > DUSK_IF_ELSE(2000.0f * std::min(actor_attr::enemy_size_multiplier(this), 1.0f), 2000.0f)) {
                 mMoveMode = 5;
                 mAtSph.OffAtSetBit();
 
@@ -3649,6 +3649,7 @@ int daB_MGN_c::create() {
 
             mAcch.Set(fopAcM_GetPosition_p(this), fopAcM_GetOldPosition_p(this), this, 1,
                       &mAcchCir, fopAcM_GetSpeed_p(this), NULL, NULL);
+            IF_DUSK(mAcch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
             mAcchCir.SetWall(actor_attr::enemy_size_value(this, 150.0f), actor_attr::enemy_size_value(this, 600.0f));
             field_0x560 = health = actor_attr::enemy_health_value(this, 700);
