@@ -284,7 +284,7 @@ static void e_mm_mt_carry(e_mm_mt_class* i_this) {
              i_this->field_0x68A[0] = false;
              if (fopAcM_GetSpeedF(actor) > 1.0f || fopAcM_GetSpeedF(player) > 10.0f) {
                  actor->speedF = TREG_F(9) + 30.0f + fopAcM_GetSpeedF(player) * 0.25f;
-                actor->speed.y = DUSK_IF_ELSE(actor_attr::enemy_move_step(i_this, TREG_F(10) + 30.0f), TREG_F(10) + 30.0f);
+                actor->speed.y = TREG_F(10) + 30.0f;
                 actor->current.angle.y = player->shape_angle.y;
                 i_this->m_mode = 0;
              } else {
@@ -433,11 +433,7 @@ static void e_mm_mt_drop(e_mm_mt_class* i_this) {
         i_this->enemy.current.pos.x += i_this->enemy.speed.x;
         i_this->enemy.current.pos.z += i_this->enemy.speed.z;
         i_this->enemy.current.pos.y += i_this->enemy.speed.y;
-#if TARGET_PC  // enemy attribute integration
-        i_this->enemy.speed.y -= actor_attr::enemy_gravity_step(i_this, 5.0f);
-#else
         i_this->enemy.speed.y += -5.0f;
-#endif
         i_this->enemy.eyePos = i_this->enemy.current.pos;
         i_this->enemy.attention_info.position = i_this->enemy.current.pos;
         DUSK_IF_ELSE(actor_attr::enemy_add_action_angle(i_this, &i_this->m_rotation.z, (s16)((TREG_S(6) + 0x10000) - 0x8000), 1, 0x1000), cLib_addCalcAngleS2(&i_this->m_rotation.z, (s16)((TREG_S(6) + 0x10000) - 0x8000), 1, 0x1000));

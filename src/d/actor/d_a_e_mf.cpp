@@ -18,7 +18,6 @@
 #if TARGET_PC  // additional actor attribute integration
 #include "d/d_com_inf_game.h"
 #include "dusk/mods/svc/actor_attribute_helpers.hpp"
-#include "dusk/mods/svc/actor_attribute_swept_acch.hpp"
 #else
 #include "Z2AudioLib/Z2Instances.h"
 #endif
@@ -2631,9 +2630,6 @@ static void action(e_mf_class* i_this) {
     cLib_addCalcAngleS2(&a_this->shape_angle.z, a_this->current.angle.z, 2, 0x2000);
 #endif
 
-#if TARGET_PC  // enemy attribute integration
-    const cXyz movementStart = a_this->current.pos;
-#endif
     if (i_this->field_0x5d8 != 0) {
         cMtx_YrotS(*calc_mtx, i_this->field_0x5d4);
         cMtx_XrotM(*calc_mtx, i_this->field_0x5d6);
@@ -2717,7 +2713,6 @@ static void action(e_mf_class* i_this) {
         }
     }
 
-    IF_DUSK(actor_attr::enemy_swept_ground_correct(i_this, i_this->mObjAcch, movementStart);)
     sVar1 = 0x800;
     if (i_this->field_0x6e0 != 0) {
         i_this->field_0x6e0--;
@@ -3597,6 +3592,7 @@ static cPhs_Step daE_MF_Create(fopAc_ac_c* a_this) {
 
         i_this->mObjAcch.Set(fopAcM_GetPosition_p(a_this), fopAcM_GetOldPosition_p(a_this), a_this, 1,
                              &i_this->mAcchCir, fopAcM_GetSpeed_p(a_this), NULL, NULL);
+        IF_DUSK(i_this->mObjAcch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
         i_this->mAcchCir.SetWall(80.0f * sizeMultiplier, 100.0f * sizeMultiplier);
         const s16 health = actor_attr::enemy_health_value(i_this, 200.0f);

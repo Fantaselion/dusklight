@@ -395,7 +395,7 @@ void daE_PM_c::SearchNearP() {
 
 BOOL daE_PM_c::SearchNextPos() {
     cXyz point(mPoint.x, mPoint.y, mPoint.z);
-    if (current.pos.abs(point) < 100.0f) {
+    if (current.pos.abs(point) < DUSK_IF_ELSE(actor_attr::enemy_size_value(this, 100.0f), 100.0f)) {
         int index = mPointIndex + 1;
         if (index >= mpPath->m_num) {
             return TRUE;
@@ -2218,9 +2218,7 @@ int daE_PM_c::Execute() {
 
     // Large Skull Kid sizes can collide with low tunnel ceilings during
     // scripted/demo movement and never reach the cutscene path target.
-    // Disable only roof correction during cutscenes; walls and ground
-    // collision remain active. Restore normal roof collision immediately
-    // outside of demos/events.
+    // Disable both wall and ceiling checks until he dissapears;
     const bool cutsceneActive = mAction == ACT_DEMO || dComIfGp_event_runCheck();
 
     if (cutsceneActive) {

@@ -899,14 +899,7 @@ static void action(e_mm_class* i_this) {
      * HIO scale explicitly here so randomized body size can never leak into
      * displacement, while retaining the original 1.4/2.5 type tuning. */
     const f32 vanillaTypeScale = actor->argument == 1 ? l_HIO.donketsu_base_size : l_HIO.base_size;
-    // MM's stored speedF is already proportional to its randomized body size.
-    // Cancel that size component before converting the vanilla forward speed
-    // into per-frame movement, so horizontal run speed follows ONLY the
-    // movement/action-speed attribute.
-    const f32 randomSize = actor_attr::enemy_size_multiplier(i_this);
-    const f32 sizeNeutralSpeedF = randomSize > 0.0f ? actor->speedF / randomSize : actor->speedF;
-
-    sp40.z = actor_attr::enemy_move_step(i_this, sizeNeutralSpeedF * vanillaTypeScale);
+    sp40.z = actor_attr::enemy_move_step(i_this, actor->speedF * vanillaTypeScale);
 #else
     sp40.z = actor->speedF * actor->scale.x;
 #endif

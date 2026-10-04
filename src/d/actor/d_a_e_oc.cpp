@@ -23,7 +23,6 @@
 #include "d/d_com_inf_game.h"
 #if TARGET_PC  // additional actor attribute integration
 #include "dusk/mods/svc/actor_attribute_helpers.hpp"
-#include "dusk/mods/svc/actor_attribute_swept_acch.hpp"
 #else
 #include "SSystem/SComponent/c_math.h"
 #include "d/actor/d_a_obj_rotBridge.h"
@@ -89,37 +88,6 @@ static f32 oc_ballistic_distance_scale(EnemyAttrClass* i_this) {
     }
 
     return 1.0f;
-}
-
-static void oc_sweep_knockback_ground(EnemyAttrClass* i_this, dBgS_Acch& acch, const cXyz& movementStart) {
-
-    // Acch's normal ground probe reaches only 60 units above the actor origin.
-    // Enlarged knockback can cross the floor in one step while its raised wall
-    // probe is still above it. Check the feet's actual path before correction.
-    if (i_this->getActionMode() != E_OC_ACTION_BIG_DAMAGE || actor_attr::enemy_size_multiplier(i_this) <= 1.0f || movementStart.y <= i_this->current.pos.y) {
-        return;
-    }
-
-    cXyz sweepStart = movementStart;
-    sweepStart.y += 1.0f;  // Include a fall starting exactly on the floor.
-    cBgS_LinChk groundSweep;
-    groundSweep.Set2(&sweepStart, &i_this->current.pos, fopAcM_GetID(i_this));
-    groundSweep.SetExtChk(acch);
-    if (!dComIfG_Bgsp().LineCross(&groundSweep) || !dBgS_CheckBGroundPoly(groundSweep)) {
-        return;
-    }
-
-    // These are the lethal ground codes used by checkFall(). Do not turn a
-    // real pit into a safe landing surface.
-    const int groundCode = dComIfG_Bgsp().GetGroundCode(groundSweep);
-    if (groundCode == 4 || groundCode == 10 || groundCode == 5) {
-        return;
-    }
-
-    i_this->current.pos = groundSweep.GetCross();
-    // Match Acch's own line-hit landing adjustment. CrrPos still sets the
-    // ground-hit flag and clears vertical speed through the normal path.
-    i_this->current.pos.y -= 1.0f;
 }
 
 static void oc_pos_move_f(EnemyAttrClass* i_this, const cXyz* movePos) {
@@ -2811,12 +2779,7 @@ void daE_OC_c::action() {
     }
 
 #if TARGET_PC  // enemy attribute integration
-    const cXyz movementStart = current.pos;
     oc_pos_move_f(this, mStts.GetCCMoveP());
-    oc_sweep_knockback_ground(this, mAcch, movementStart);
-    if (getActionMode() != E_OC_ACTION_BIG_DAMAGE || actor_attr::enemy_size_multiplier(this) <= 1.0f) {
-        actor_attr::enemy_swept_ground_correct(this, mAcch, movementStart);
-    }
 #else
     fopAcM_posMoveF(this, mStts.GetCCMoveP());
 #endif
@@ -3069,6 +3032,7 @@ cPhs_Step daE_OC_c::create() {
 #endif
             mAcch.Set(fopAcM_GetPosition_p(this), fopAcM_GetOldPosition_p(this), this, 1, &mAcchCir,
                       fopAcM_GetSpeed_p(this), NULL, NULL);
+            IF_DUSK(mAcch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
             if (0 == strcmp("D_MN05", dComIfGp_getStartStageName())
                 && dComIfGp_getStartStageRoomNo() == 0xc) {
                 mAcchCir.SetWallH(DUSK_IF_ELSE(95.0f * actor_attr::enemy_size_multiplier(this), 95.0f));

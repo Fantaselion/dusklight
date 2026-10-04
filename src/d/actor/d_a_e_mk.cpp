@@ -1099,6 +1099,14 @@ static s8 e_mk_e_demo(e_mk_class* i_this) {
                     actor->speedF = 0.0f;
                     actor->gravity = 0.0f;
                     actor->speed.y = 0.0f;
+#if TARGET_PC  // enemy attribute integration
+                    const f32 size = actor_attr::enemy_size_multiplier(i_this);
+                    if (size != 1.0f) {
+                        // Apply 25% of the size change to his height above the arena floor.
+                        actor->current.pos.y = STAGE_CENTER_POS.y + (actor->current.pos.y - STAGE_CENTER_POS.y) * (1.0f + (size - 1.0f) * 0.25f);
+                        actor->old.pos.y = actor->current.pos.y;
+                    }
+#endif
                     i_this->timer[0] = DUSK_IF_ELSE(actor_attr::enemy_sync_timer(i_this, 40), 40);
                     unk_flag = 60;
                     target_info_count = 0;
@@ -1150,10 +1158,11 @@ static s8 e_mk_e_demo(e_mk_class* i_this) {
 #endif
 
         case 4:
-            // this extra check is because at high movement speeds he will go through the floor
-            if (DUSK_IF_ELSE(i_this->acch.ChkGroundHit() && actor->current.pos.y <= i_this->acch.GetGroundH() + 5.0f, i_this->acch.ChkGroundHit())) {
+            // Land this cutscene fall on the arena floor rather than the pillar.
+            if (DUSK_IF_ELSE(actor->current.pos.y <= STAGE_CENTER_POS.y, i_this->acch.ChkGroundHit())) {
                 actor->speedF = 0.0f;
 #if TARGET_PC  // enemy attribute integration
+				actor->current.pos.y = STAGE_CENTER_POS.y;
 				actor->speed.y = 0.0f;
 				actor->gravity = 0.0f;
 #endif
@@ -2700,7 +2709,15 @@ static void action(e_mk_class* i_this) {
 #endif
 
         if (i_this->unkFlag3 == 1) {
+#if TARGET_PC  // enemy attribute integration
+            if (i_this->action == e_mk_class::ACT_E_DEMO && i_this->mode == 4) {
+                actor->current.pos.y = std::max(actor->current.pos.y, STAGE_CENTER_POS.y);
+            } else {
+                i_this->acch.CrrPos(dComIfG_Bgsp());
+            }
+#else
             i_this->acch.CrrPos(dComIfG_Bgsp());
+#endif
         }
     } else {
         actor->current.pos += DUSK_IF_ELSE(actor_attr::enemy_move_step(i_this, actor->speed), actor->speed);
@@ -3167,6 +3184,7 @@ static int daE_MK_Create(fopAc_ac_c* i_actor) {
 
         mk->acch.Set(fopAcM_GetPosition_p(i_actor), fopAcM_GetOldPosition_p(i_actor), i_actor, 1, &mk->acchcir,
                           fopAcM_GetSpeed_p(i_actor), NULL, NULL);
+        IF_DUSK(mk->acch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
         mk->acchcir.SetWall(actor_attr::enemy_size_value(mk, 80.0f), actor_attr::enemy_size_value(mk, 30.0f));
         i_actor->field_0x560 = i_actor->health = actor_attr::enemy_health_value(mk, 200.0f);
