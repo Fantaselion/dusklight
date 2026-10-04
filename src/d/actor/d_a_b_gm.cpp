@@ -2128,7 +2128,7 @@ static int daB_GM_Execute(b_gm_class* i_this) {
         cMtx_YrotS(*calc_mtx, i_this->field_0x6c8);
         spD4.x = 0.0f;
         spD4.y = 0.0f;
-        spD4.z = i_this->field_0x6c4;
+        spD4.z = DUSK_IF_ELSE(actor_attr::enemy_action_step(i_this, i_this->field_0x6c4), i_this->field_0x6c4);
         MtxPosition(&spD4, &spB0);
         i_this->field_0x6cc += spB0;
 

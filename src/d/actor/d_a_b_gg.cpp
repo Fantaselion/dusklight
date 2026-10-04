@@ -354,7 +354,7 @@ void daB_GG_c::G_setCcCylinder() {
     mDoMtx_stack_c::multVec(&center_pos, &center_pos);
 
     mCcShieldSph.SetC(center_pos);
-    mCcShieldSph.SetR(DUSK_IF_ELSE(actor_attr::enemy_size_value(this, (150.0f + yREG_F(18)) * l_HIO.base_size), (150.0f + yREG_F(18)) * l_HIO.base_size));
+    mCcShieldSph.SetR(DUSK_IF_ELSE(actor_attr::enemy_size_value(this, (150.0f + yREG_F(18)) * l_HIO.base_size) * 0.8f, (150.0f + yREG_F(18)) * l_HIO.base_size));
     dComIfG_Ccsp()->Set(&mCcShieldSph);
 }
 
@@ -2183,7 +2183,7 @@ void daB_GG_c::F_DamageAction() {
             mDoMtx_stack_c::copy(mpModelMorf->getModel()->getAnmMtx(0xB));
             mDoMtx_stack_c::multVec(&sp24, &sp24);
             sp24 = *hookshot_top;
-            sp24.y -= 100.0f + BREG_F(7);
+            sp24.y -= DUSK_IF_ELSE(actor_attr::enemy_size_value(this, 100.0f + BREG_F(7)), 100.0f + BREG_F(7));
             DUSK_IF_ELSE(actor_attr::enemy_chase_action_pos(this, &current.pos, sp24, 120.0f), cLib_chasePos(&current.pos, sp24, 120.0f));
 
             if (mAcch.ChkWallHit() && mTimers[0] == 0) {
@@ -4101,6 +4101,15 @@ int daB_GG_c::Execute() {
     setShieldMtx();
     setSwordMtx();
 
+#if TARGET_PC  // enemy attribute integration
+    // Link uses collision group 0x10. Restore it as soon as the hookshot pull ends.
+	// This is because at bigger sizes, link can block him touching the ground with his collision thus causing him to go back into the air.
+    const bool hookshotPull = fopAcM_checkHookCarryNow(this) || (mAction == ACTION_FLY && mSubAction == SUBACT_DAMAGE && mMode == 11 && player->checkHookshotReturnMode());
+    const u32 collisionGroups = actor_attr::enemy_size_multiplier(this) > 1.0f && hookshotPull ? 0x60 : 0x70;
+    mCcCyl.SetCoVsGrp(collisionGroups);
+    mCcShieldSph.SetCoVsGrp(collisionGroups);
+#endif
+
     if (mAction == ACTION_GROUND) {
         G_setCcCylinder();
     } else {
@@ -4687,6 +4696,7 @@ int daB_GG_c::Create() {
         }
 
         mAcch.Set(fopAcM_GetPosition_p(this), fopAcM_GetOldPosition_p(this), this, 1, &mAcchCir, fopAcM_GetSpeed_p(this), NULL, NULL);
+		IF_DUSK(mAcch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 
         cXyz sp34(0.0f, 0.0f, -57.0f);
         field_0x6bc = 0;
