@@ -37,6 +37,13 @@ template <> struct EnemyAttributeOwner<daB_DS_c> {
 
 }
 };
+
+template <> inline f32 enemy_size_multiplier<daB_DS_c>(daB_DS_c* i_this) {
+    fopAc_ac_c* owner = enemy_attribute_actor(i_this);
+    const f32 size = resolve_multiplier(owner, ACTOR_ATTRIBUTE_SIZE);
+    const bool flyingHead = i_this->arg0 == daB_DS_c::TYPE_BATTLE_2 || static_cast<daB_DS_c*>(owner)->arg0 == daB_DS_c::TYPE_BATTLE_2;
+    return flyingHead ? std::min(size, 2.0f) : size;
+}
 }
 #endif
 
@@ -3245,7 +3252,7 @@ void daB_DS_c::mFuwafuwaSet(bool param_0) {
     if (param_0) {
         daPy_py_c* pla = daPy_getPlayerActorClass();
         dBgS_GndChk gnd_chk;
-        f32 cHigh = 1000.0f;
+        f32 cHigh = DUSK_IF_ELSE(actor_attr::enemy_size_value(this, 1000.0f), 1000.0f);
 
         mSandPos.y = pla->current.pos.y;
 
@@ -3418,6 +3425,14 @@ bool daB_DS_c::mBattle2MoveFSet() {
     offset.y = 0.0f;
     offset.z = field_0x80c;
     MtxPosition(&offset, &field_0x718);
+#if TARGET_PC  // enemy attribute integration
+    // Apply 25% of the size change to the horizontal rail firing distance.
+    if (mAction == ACT_B2_F_MOVE && pla->checkSpinnerPathMove() && actor_attr::enemy_size_multiplier(this) > 1.0f) {
+        const f32 railDistanceScale = 1.0f + (actor_attr::enemy_size_multiplier(this) - 1.0f) * 0.25f;
+        field_0x718.x = pla->current.pos.x + (field_0x718.x - pla->current.pos.x) * railDistanceScale;
+        field_0x718.z = pla->current.pos.z + (field_0x718.z - pla->current.pos.z) * railDistanceScale;
+    }
+#endif
 
     ato = field_0x718 - current.pos;
     ato.y = 0.0f;
