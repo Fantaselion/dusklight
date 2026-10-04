@@ -8201,6 +8201,8 @@ static cPhs_Step daE_RD_Create(fopAc_ac_c* actor) {
         i_this->Bgc.Set(fopAcM_GetPosition_p(actor), fopAcM_GetOldPosition_p(actor), actor, 1,
                              &i_this->AcchCir, fopAcM_GetSpeed_p(actor), NULL, NULL);
 #if TARGET_PC  // enemy attribute integration
+		// Check below the raised wall circle when fast gravity crosses the floor. This stops bobbing at high speeds combined with bigger sizes.
+        IF_DUSK(i_this->Bgc.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
         i_this->AcchCir.SetWall(50.0f * sizeMultiplier, 50.0f * sizeMultiplier);
 #else
         i_this->AcchCir.SetWall(50.0f, 50.0f);

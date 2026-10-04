@@ -17,7 +17,6 @@
 #if TARGET_PC  // additional actor attribute integration
 #include "dusk/settings.h"
 #include "dusk/mods/svc/actor_attribute_helpers.hpp"
-#include "dusk/mods/svc/actor_attribute_swept_acch.hpp"
 #endif
 #include <cstring>
 
@@ -1642,9 +1641,6 @@ static void action(e_s1_class* i_this) {
     mae.z = DUSK_IF_ELSE(actor_attr::enemy_move_step(i_this, a_this->speedF * l_HIO.mBaseSize), a_this->speedF * l_HIO.mBaseSize);
     MtxPosition(&mae, &ato);
 
-#if TARGET_PC  // enemy attribute integration
-    const cXyz movementStart = a_this->current.pos;
-#endif
     a_this->speed.x = ato.x;
     a_this->speed.z = ato.z;
     a_this->current.pos += a_this->speed;
@@ -1681,7 +1677,6 @@ static void action(e_s1_class* i_this) {
             a_this->current.pos.z += ccmove->z;
         }
     }
-    IF_DUSK(actor_attr::enemy_swept_ground_correct(i_this, i_this->mAcch, movementStart);)
 }
 
 static void ke_set(e_s1_class* i_this) {
@@ -2348,6 +2343,7 @@ static int daE_S1_Create(fopAc_ac_c* i_this) {
         OS_REPORT("//////////////E_S1 POS %d,%d,%d \n", (int)i_this->home.pos.x, (int)i_this->home.pos.y, (int)i_this->home.pos.z);
         a_this->mAcch.Set(fopAcM_GetPosition_p(i_this), fopAcM_GetOldPosition_p(i_this), i_this, 1,
                           &a_this->mAcchCir, fopAcM_GetSpeed_p(i_this), NULL, NULL);
+        IF_DUSK(a_this->mAcch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
         a_this->mAcchCir.SetWall(50.0f * actor_attr::enemy_size_multiplier(a_this), 100.0f * actor_attr::enemy_size_multiplier(a_this));
 #else

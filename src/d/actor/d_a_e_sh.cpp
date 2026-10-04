@@ -1352,6 +1352,7 @@ static int daE_SH_Create(fopAc_ac_c* i_this) {
 
         sh->mObjAcch.Set(fopAcM_GetPosition_p(i_this), fopAcM_GetOldPosition_p(i_this), i_this, 1,
                          &sh->mAcchCir, fopAcM_GetSpeed_p(i_this), NULL, NULL);
+        IF_DUSK(sh->mObjAcch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 
 #if TARGET_PC  // enemy attribute integration
         sh->mAcchCir.SetWall((50.0f) * actor_attr::enemy_size_multiplier(i_this), (60.0f) * actor_attr::enemy_size_multiplier(i_this));

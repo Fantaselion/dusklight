@@ -2129,6 +2129,7 @@ static int daE_RDB_Create(fopAc_ac_c* actor) {
 #endif
         i_this->mAcch.Set(fopAcM_GetPosition_p(actor), fopAcM_GetOldPosition_p(actor), actor, 1,
                           &i_this->mAcchCir, fopAcM_GetSpeed_p(actor), NULL, NULL);
+        IF_DUSK(i_this->mAcch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
         i_this->mAcchCir.SetWall(50.0f * sizeMultiplier, 150.0f * sizeMultiplier);
 #else

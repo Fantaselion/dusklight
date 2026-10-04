@@ -3440,6 +3440,7 @@ static cPhs_Step daE_ST_Create(fopAc_ac_c* a_this) {
 
         i_this->mBgc.Set(fopAcM_GetPosition_p(a_this), fopAcM_GetOldPosition_p(a_this), a_this, 1, &i_this->mAcchCir,
                          fopAcM_GetSpeed_p(a_this), NULL, NULL);
+        IF_DUSK(i_this->mBgc.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
         i_this->mAcchCir.SetWall(60.0f * actor_attr::enemy_size_multiplier(i_this), 60.0f * actor_attr::enemy_size_multiplier(i_this));
 #else

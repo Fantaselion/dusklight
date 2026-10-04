@@ -9,7 +9,6 @@
 #if TARGET_PC  // additional actor attribute integration
 
 #include "dusk/mods/svc/actor_attribute_helpers.hpp"
-#include "dusk/mods/svc/actor_attribute_swept_acch.hpp"
 
 namespace actor_attr = dusk::mods::svc::actor_attr;
 
@@ -1237,9 +1236,6 @@ static void action(e_sf_class* i_this) {
     MtxPosition(&spcc, &spd8);
     a_this->speed.x = spd8.x;
     a_this->speed.z = spd8.z;
-#if TARGET_PC  // enemy attribute integration
-    const cXyz movementStart = a_this->current.pos;
-#endif
     a_this->current.pos += a_this->speed * l_HIO.basic_size;
     a_this->speed.y += a_this->gravity;
     a_this->gravity = DUSK_IF_ELSE(actor_attr::enemy_signed_gravity_step(i_this, -5.0f), -5.0f);
@@ -1271,7 +1267,6 @@ static void action(e_sf_class* i_this) {
         DUSK_IF_ELSE(actor_attr::enemy_add_action_calc0(i_this, &i_this->field_0x6c4, 1.0f, TREG_F(12) + 7.0f), cLib_addCalc0(&i_this->field_0x6c4, 1.0f, TREG_F(12) + 7.0f));
     }
 
-    IF_DUSK(actor_attr::enemy_swept_ground_correct(i_this, i_this->mBgc, movementStart);)
     i_this->mBgc.CrrPos(dComIfG_Bgsp());
 
     if (i_this->field_0x6ae > 0) {
@@ -1928,6 +1923,7 @@ static cPhs_Step daE_SF_Create(fopAc_ac_c* a_this) {
 #endif
         i_this->mBgc.Set(fopAcM_GetPosition_p(a_this), fopAcM_GetOldPosition_p(a_this), a_this, 1, &i_this->mAcchCir,
                          fopAcM_GetSpeed_p(a_this), NULL, NULL);
+        IF_DUSK(i_this->mBgc.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
         i_this->mAcchCir.SetWall((80.0f) * actor_attr::enemy_size_multiplier(i_this), (100.0f) * actor_attr::enemy_size_multiplier(i_this));
         a_this->health = actor_attr::enemy_health_value(i_this, 200.0f);

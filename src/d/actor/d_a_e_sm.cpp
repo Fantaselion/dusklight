@@ -109,110 +109,13 @@ struct EnemyActorAccessor<daE_SM_c> {
 
 }  // namespace dusk::mods::svc::actor_attr
 
-static f32 sm_segment_point_distance_sq(const cXyz& start, const cXyz& end, const cXyz& point, bool useY) {
-
-    cXyz step = end - start;
-    cXyz offset = point - start;
-    if (!useY) {
-        step.y = 0.0f;
-        offset.y = 0.0f;
-    }
-
-    const f32 stepLengthSq = step.x * step.x + step.y * step.y + step.z * step.z;
-    if (stepLengthSq <= 0.0f) {
-        return offset.x * offset.x + offset.y * offset.y + offset.z * offset.z;
-    }
-
-    f32 time = (offset.x * step.x + offset.y * step.y + offset.z * step.z) / stepLengthSq;
-    if (time < 0.0f) {
-        time = 0.0f;
-    } else if (time > 1.0f) {
-        time = 1.0f;
-    }
-
-    const cXyz closest = start + step * time;
-    const cXyz delta = point - closest;
-    return delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
+// Keep the core's bubble-entry hop on vanilla time with size-scaled physics.
+static bool sm_core_hop(daE_SM_c* i_this) {
+    return (i_this->mCoreAction == CORE_ACTION_FREE || i_this->mCoreAction == CORE_ACTION_DEMO) && i_this->field_0x9c4 != 0 && i_this->field_0x6b2 == 1 && i_this->field_0x6b4 == 2 && (i_this->field_0x6b6 == 7 || i_this->field_0x6b6 == 6);
 }
 
-static bool sm_swept_reached(daE_SM_c* i_this, const cXyz& start, const cXyz& end, const cXyz& point, f32 radius, bool useY) {
-
-    if (actor_attr::enemy_action_time_speed(i_this) == 1.0f) {
-        return false;
-    }
-
-    return sm_segment_point_distance_sq(start, end, point, useY) < radius * radius;
-}
-
-// The room-10 E_SM is the scripted/cutscene instance. 400% size breaks its
-// bubble-return sequence, so only this specific instance is capped at 300%.
-// Other E_SM actors still use the full randomized size range.
-static f32 sm_size_multiplier(daE_SM_c* i_this) {
-
-    f32 sizeMultiplier = actor_attr::enemy_size_multiplier(i_this);
-
-    if (fopAcM_GetRoomNo(i_this) == 10 && sizeMultiplier > 3.0f) {
-        sizeMultiplier = 3.0f;
-    }
-
-    return sizeMultiplier;
-}
-
-static cXyz sm_size_multiplier(daE_SM_c* i_this, const f32 vanillaScale) {
-
-    const f32 scaled = vanillaScale * sm_size_multiplier(i_this);
-    return cXyz(scaled, scaled, scaled);
-}
-
-static cXyz sm_size_multiplier(daE_SM_c* i_this, cXyz vanillaScale) {
-
-    vanillaScale *= sm_size_multiplier(i_this);
-    return vanillaScale;
-}
-
-/* Return true when this helper already performed background correction. */
-static bool sm_core_pos_move_f(daE_SM_c* i_this, const cXyz* ccMove) {
-
-    const f32 vanillaSpeedF = i_this->speedF;
-    const f32 vanillaGravity = i_this->gravity;
-    const f32 actionSpeed = actor_attr::enemy_action_time_speed(i_this);
-
-    // Do not pre-scale speedF here. fopAcM_posMoveF -> fopAcM_calcSpeed
-    // already resolves generic actor forward speed through the attribute service.
-    // Pre-scaling here as well makes 400% movement become 4x * 4x = 16x.
-    if (vanillaGravity < 0.0f) {
-        i_this->gravity = -actor_attr::enemy_gravity_step(i_this, -vanillaGravity);
-    } else {
-        i_this->gravity = actor_attr::enemy_gravity_step(i_this, vanillaGravity);
-    }
-
-    const cXyz startPos = i_this->current.pos;
-    fopAcM_posMoveF(i_this, ccMove);
-
-    bool corrected = false;
-    if (actionSpeed > 1.0f) {
-        int substepCount = static_cast<int>(actionSpeed);
-        if (static_cast<f32>(substepCount) < actionSpeed) {
-            substepCount++;
-        }
-
-        const cXyz substep = (i_this->current.pos - startPos) / static_cast<f32>(substepCount);
-        const cXyz savedOldPos = i_this->old.pos;
-        i_this->current.pos = startPos;
-
-        for (int i = 0; i < substepCount; i++) {
-            i_this->old.pos = i_this->current.pos;
-            i_this->current.pos += substep;
-            i_this->field_0xa60.CrrPos(dComIfG_Bgsp());
-        }
-
-        i_this->old.pos = savedOldPos;
-        corrected = true;
-    }
-
-    i_this->speedF = vanillaSpeedF;
-    i_this->gravity = vanillaGravity;
-    return corrected;
+static f32 sm_core_action_speed(daE_SM_c* i_this) {
+    return sm_core_hop(i_this) ? 1.0f : actor_attr::enemy_action_time_speed(i_this);
 }
 #endif
 
@@ -226,7 +129,7 @@ daE_Sm_HIO_c::daE_Sm_HIO_c() {
 void daE_SM_c::SetAnm(int i_index, int i_attr, f32 i_rate, f32 i_morf) {
 #if TARGET_PC  // enemy attribute integration
 
-    const actor_attr::ActionAnimationParams params = actor_attr::action_animation_params(i_morf, i_rate, actor_attr::enemy_action_time_speed(this));
+    const actor_attr::ActionAnimationParams params = actor_attr::action_animation_params(i_morf, i_rate, sm_core_action_speed(this));
     mpModelMorf->setAnm((J3DAnmTransform*)dComIfG_getObjectRes("E_SM", i_index), i_attr, params.morph, params.playbackSpeed, 0.0f, -1.0f);
 #else
     mpModelMorf->setAnm((J3DAnmTransform*)dComIfG_getObjectRes("E_SM", i_index), i_attr, i_morf, i_rate, 0.0f, -1.0f);
@@ -259,7 +162,7 @@ int daE_SM_c::Draw() {
 
     if (field_0x9c4 != 0) {
 #if TARGET_PC  // enemy attribute integration
-        const f32 coreSizeMultiplier = sm_size_multiplier(this);
+        const f32 coreSizeMultiplier = actor_attr::enemy_size_multiplier(this);
 #endif
         cXyz sp68;
 #if TARGET_PC  // enemy attribute integration
@@ -274,7 +177,7 @@ int daE_SM_c::Draw() {
 
     if (!field_0x684) {
 #if TARGET_PC  // enemy attribute integration
-        const f32 bubbleSizeMultiplier = sm_size_multiplier(this);
+        const f32 bubbleSizeMultiplier = actor_attr::enemy_size_multiplier(this);
 #endif
         g_env_light.setLightTevColorType_MAJI(mpBubbleModel, &tevStr);
         fopAcM_setEffectMtx(this, mpBubbleModel->getModelData());
@@ -291,7 +194,7 @@ static BOOL way_bg_check(daE_SM_c* i_this, f32 param_2, cXyz param_3, s16 param_
     dBgS_LinChk lin_chk;
     cXyz sp94, i_start, i_end;
 #if TARGET_PC  // enemy attribute integration
-    const f32 bubbleSizeMultiplier = sm_size_multiplier(i_this);
+    const f32 bubbleSizeMultiplier = actor_attr::enemy_size_multiplier(i_this);
 #endif
 
     i_start = param_3;
@@ -316,7 +219,7 @@ static BOOL other_bg_check(daE_SM_c* i_this, fopAc_ac_c* param_2) {
     dBgS_LinChk lin_chk;
     cXyz sp98, i_start, i_end;
 #if TARGET_PC  // enemy attribute integration
-    const f32 coreSizeMultiplier = sm_size_multiplier(i_this);
+    const f32 coreSizeMultiplier = actor_attr::enemy_size_multiplier(i_this);
 #endif
 
     i_end = param_2->current.pos;
@@ -357,7 +260,7 @@ void daE_SM_c::Particle_Set(u16 i_resID, cXyz i_scale, cXyz i_pos, csXyz i_rotat
 void daE_SM_c::ArrowCheck() {
     cXyz* tgHitPosP = mCoSm.GetTgHitPosP();
 #if TARGET_PC  // enemy attribute integration
-    const f32 bubbleSizeMultiplier = sm_size_multiplier(this);
+    const f32 bubbleSizeMultiplier = actor_attr::enemy_size_multiplier(this);
     field_0x6d4 = actor_attr::enemy_sync_timer(this, 10);
 #else
     field_0x6d4 = 10;
@@ -571,7 +474,7 @@ void daE_SM_c::SmDamageCheck() {
             field_0x6d4 = DUSK_IF_ELSE(actor_attr::enemy_sync_timer(this, 10), 10);
             field_0x682 = true;
 #if TARGET_PC  // enemy attribute integration
-            cXyz i_scale = sm_size_multiplier(this, 1.5f);
+            cXyz i_scale = actor_attr::enemy_size_multiplier(this, 1.5f);
 #else
             cXyz i_scale(1.5f, 1.5f, 1.5f);
 #endif
@@ -611,7 +514,7 @@ void daE_SM_c::SmDamageCheck() {
 
     cXyz sp34(field_0x990);
 #if TARGET_PC  // enemy attribute integration
-    const f32 bubbleSizeMultiplier = sm_size_multiplier(this);
+    const f32 bubbleSizeMultiplier = actor_attr::enemy_size_multiplier(this);
     sp34.y += 100.0f * bubbleSizeMultiplier;
 #else
     sp34.y += 100.0f;
@@ -662,7 +565,7 @@ void daE_SM_c::E_SM_Normal() {
     f32 fVar2 = 0.0f;
 #if TARGET_PC  // enemy attribute integration
     const s16 bubblePhaseStep = static_cast<s16>((field_0x980 + 1000.0f) / field_0x6f0);
-    const f32 bubbleCheckDistance = (scale.x * 100.0f) * sm_size_multiplier(this);
+    const f32 bubbleCheckDistance = (scale.x * 100.0f) * actor_attr::enemy_size_multiplier(this);
     actor_attr::enemy_angle_add(this, field_0x6bc, bubblePhaseStep);
 #else
     field_0x6bc += (int)((field_0x980 + 1000.0f) / field_0x6f0);
@@ -888,7 +791,7 @@ void daE_SM_c::E_SM_Attack() {
                 mMode = 0;
             } else {
 #if TARGET_PC  // enemy attribute integration
-            const f32 coreSizeMultiplier = sm_size_multiplier(this);
+            const f32 coreSizeMultiplier = actor_attr::enemy_size_multiplier(this);
             actor_attr::enemy_add_action_calc2(this, &current.pos.y, field_0x990.y + 20.0f * coreSizeMultiplier, 5.0f, 0.05f);
             actor_attr::enemy_add_action_calc2(this, &field_0x6e0, 0.85f, 0.4f, 0.05f);
             actor_attr::enemy_add_action_calc2(this, &field_0x6dc, 0.0f, 0.03f, 0.01f);
@@ -1025,13 +928,13 @@ void daE_SM_c::E_SM_C_Near_Escape() {
             DUSK_IF_ELSE(actor_attr::enemy_chase_action_angle(this, &current.angle.y, field_0x6d8, 0x2000), cLib_chaseAngleS(&current.angle.y, field_0x6d8, 0x2000));
             field_0x9b0.y = current.angle.y;
 
-            if (!way_bg_check(this, DUSK_IF_ELSE(400.0f * sm_size_multiplier(this), 400.0f), current.pos, current.angle.y)) {
+            if (!way_bg_check(this, DUSK_IF_ELSE(400.0f * actor_attr::enemy_size_multiplier(this), 400.0f), current.pos, current.angle.y)) {
                 current.angle.y += cM_rndFX(2000.0f);
             } else {
                 field_0x6d8 += 0x2000;
             }
 
-            if (s_Dis > DUSK_IF_ELSE(600.0f * sm_size_multiplier(this), 600.0f)) {
+            if (s_Dis > DUSK_IF_ELSE(600.0f * actor_attr::enemy_size_multiplier(this), 600.0f)) {
                 field_0x6b4 = 1;
                 field_0x6b6 = 0;
             }
@@ -1086,7 +989,7 @@ void daE_SM_c::E_SM_C_Far_Escape() {
                 field_0x9b0.y = field_0x6d8;
 
 #if TARGET_PC  // enemy attribute integration
-            if (!way_bg_check(this, 400.0f * sm_size_multiplier(this), current.pos, current.angle.y)) {
+            if (!way_bg_check(this, 400.0f * actor_attr::enemy_size_multiplier(this), current.pos, current.angle.y)) {
                 break;
             }
 #else
@@ -1094,7 +997,7 @@ void daE_SM_c::E_SM_C_Far_Escape() {
 #endif
             }
 
-            if (s_Dis <= DUSK_IF_ELSE(600.0f * sm_size_multiplier(this), 600.0f)) {
+            if (s_Dis <= DUSK_IF_ELSE(600.0f * actor_attr::enemy_size_multiplier(this), 600.0f)) {
                 field_0x6b4 = 0;
                 field_0x6b6 = 4;
                 SetAnm(BCK_SC_KYORO, J3DFrameCtrl::EMode_NONE, 1.0f, 3.0f);
@@ -1157,18 +1060,15 @@ void daE_SM_c::E_SM_C_Home_Escape() {
             }
             break;
 
-        case 5:
-#if TARGET_PC  // enemy attribute integration
-        {
-#endif
+        case 5: {
             mCoCore.OnCoSetBit();
             field_0x6d8 = cLib_targetAngleY(&current.pos, &field_0x990);
             DUSK_IF_ELSE(actor_attr::enemy_chase_action_angle(this, &current.angle.y, field_0x6d8, 0x1000), cLib_chaseAngleS(&current.angle.y, field_0x6d8, 0x1000));
 
 #if TARGET_PC  // enemy attribute integration
-        const f32 homeRadius = (oREG_F(0) + 220.0f) * sm_size_multiplier(this);
+            const f32 homeRadius = (oREG_F(0) + 220.0f) * actor_attr::enemy_size_multiplier(this);
 
-        if (current.pos.absXZ(field_0x990) < homeRadius) {
+            if (current.pos.absXZ(field_0x990) < homeRadius) {
 #else
             if (current.pos.absXZ(field_0x990) < oREG_F(0) + 220.0f) {
 #endif
@@ -1191,34 +1091,15 @@ void daE_SM_c::E_SM_C_Home_Escape() {
                 }
             }
             break;
+        }
 
-#if TARGET_PC  // enemy attribute integration
-            }
-
-#endif
         case 7:
-#if TARGET_PC  // enemy attribute integration
-        {
-        const f32 bubbleHopSizeMultiplier = sm_size_multiplier(this);
-#endif
             if (mAnm == BCK_SC_S_JUMP_A && mpModelMorf->isStop()) {
-#if TARGET_PC  // enemy attribute integration
-                speed.y = actor_attr::enemy_move_step(this, oREG_F(1) + 73.0f);
-                speedF = (oREG_F(2) + 10.0f) * bubbleHopSizeMultiplier;
-#else
-                speed.y = oREG_F(1) + 73.0f;
+                speed.y = DUSK_IF_ELSE(actor_attr::enemy_size_value(this, oREG_F(1) + 73.0f), oREG_F(1) + 73.0f);
                 speedF = oREG_F(2) + 10.0f;
-#endif
                 current.angle.y = cLib_targetAngleY(&current.pos, &field_0x990);
-                field_0x6ca[3] = DUSK_IF_ELSE(actor_attr::enemy_sync_timer(this, 15), 15);
+                field_0x6ca[3] = 15;
                 SetAnm(BCK_SC_S_JUMP_B, J3DFrameCtrl::EMode_LOOP, 1.0f, 3.0f);
-            }
-
-            if (mAnm == BCK_SC_S_JUMP_B) {
-                // The bubble-entry hop distance should grow/shrink with the bubble.
-                // Movement speed is still handled by the normal actor movement path;
-                // this multiplier only makes the hop's physical distance size-sensitive.
-                speedF = DUSK_IF_ELSE((oREG_F(2) + 10.0f) * bubbleHopSizeMultiplier, oREG_F(2) + 10.0f);
             }
 
             if (speed.y <= 0.0f && mAnm == BCK_SC_S_JUMP_B && mCoCore.ChkCoHit()) {
@@ -1230,7 +1111,7 @@ void daE_SM_c::E_SM_C_Home_Escape() {
                 cXyz sp20(0.5f, 0.5f, 0.5f);
                 sp20 *= 1.0f;
 #if TARGET_PC  // enemy attribute integration
-            cXyz bubbleEffectScale = sm_size_multiplier(this, scale);
+            cXyz bubbleEffectScale = actor_attr::enemy_size_multiplier(this, scale);
             dComIfGp_particle_set(0x8781, &current.pos, &tevStr, &current.angle, &bubbleEffectScale);
             dComIfGp_particle_set(0x8782, &current.pos, &tevStr, &current.angle, &bubbleEffectScale);
             dComIfGp_particle_set(0x8783, &current.pos, &tevStr, &current.angle, &bubbleEffectScale);
@@ -1260,12 +1141,9 @@ void daE_SM_c::E_SM_C_Home_Escape() {
                 field_0xe8c.SetWeight(150);
             }
             break;
-#if TARGET_PC  // enemy attribute integration
-    }
-#endif
 
         case 20:
-            if (current.pos.y < field_0x990.y + DUSK_IF_ELSE(80.0f * sm_size_multiplier(this), 80.0f)) {
+            if (current.pos.y < field_0x990.y + DUSK_IF_ELSE(80.0f * actor_attr::enemy_size_multiplier(this), 80.0f)) {
                 speed.y = 0.0f;
                 speedF = 0.0f;
 
@@ -1275,7 +1153,7 @@ void daE_SM_c::E_SM_C_Home_Escape() {
 
                 cXyz sp2c;
                 sp2c = field_0x990;
-                sp2c.y += DUSK_IF_ELSE(80.0f * sm_size_multiplier(this), 80.0f);
+                sp2c.y += DUSK_IF_ELSE(80.0f * actor_attr::enemy_size_multiplier(this), 80.0f);
 
                 if (DUSK_IF_ELSE(actor_attr::enemy_chase_action_pos(this, &current.pos, sp2c, 6.0f), cLib_chasePos(&current.pos, sp2c, 6.0f)) != 0) {
                     mCoreAction = CORE_ACTION_NORMAL;
@@ -1289,17 +1167,10 @@ void daE_SM_c::E_SM_C_Home_Escape() {
         case 6:
             field_0xe50.ClrCcMove();
             speedF = 0.0f;
-#if TARGET_PC  // enemy attribute integration
-            actor_attr::enemy_chase_action_float(this, &speed.y, 0.0f, yREG_F(3) + 17.0f);
-            actor_attr::enemy_chase_action_float(this, &speedF, 0.0f, yREG_F(7) + 3.5f);
-            actor_attr::enemy_chase_action_float(this, &current.pos.x, field_0x990.x, 8.0f);
-            actor_attr::enemy_chase_action_float(this, &current.pos.z, field_0x990.z, 8.0f);
-#else
-            cLib_chaseF(&speed.y, 0.0f, yREG_F(3) + 17.0f);
+            cLib_chaseF(&speed.y, 0.0f, DUSK_IF_ELSE(actor_attr::enemy_size_value(this, yREG_F(3) + 17.0f), yREG_F(3) + 17.0f));
             cLib_chaseF(&speedF, 0.0f, yREG_F(7) + 3.5f);
-            cLib_chaseF(&current.pos.x, field_0x990.x, 8.0f);
-            cLib_chaseF(&current.pos.z, field_0x990.z, 8.0f);
-#endif
+            cLib_chaseF(&current.pos.x, field_0x990.x, DUSK_IF_ELSE(actor_attr::enemy_size_value(this, 8.0f), 8.0f));
+            cLib_chaseF(&current.pos.z, field_0x990.z, DUSK_IF_ELSE(actor_attr::enemy_size_value(this, 8.0f), 8.0f));
 
             if (mpModelMorf->isStop()) {
                 SetAnm(BCK_SC_MOVE02, J3DFrameCtrl::EMode_LOOP, 1.0f, 5.0f);
@@ -1308,9 +1179,9 @@ void daE_SM_c::E_SM_C_Home_Escape() {
             if (speed.y == 0.0f && speedF == 0.0f) {
                 cXyz sp38;
                 sp38 = field_0x990;
-                sp38.y += DUSK_IF_ELSE(80.0f * sm_size_multiplier(this), 80.0f);
+                sp38.y += DUSK_IF_ELSE(80.0f * actor_attr::enemy_size_multiplier(this), 80.0f);
 
-                if (DUSK_IF_ELSE(actor_attr::enemy_chase_action_pos(this, &current.pos, sp38, oREG_F(7) + 5.0f), cLib_chasePos(&current.pos, sp38, oREG_F(7) + 5.0f)) != 0) {
+                if (cLib_chasePos(&current.pos, sp38, DUSK_IF_ELSE(actor_attr::enemy_size_value(this, oREG_F(7) + 5.0f), oREG_F(7) + 5.0f)) != 0) {
                     mCoCore.SetTgType(0);
                     mCoCore.SetTgType(0x4000);
                     field_0x6be = 0;
@@ -1332,26 +1203,19 @@ void daE_SM_c::E_SM_C_Home_Escape() {
             break;
     }
 
-    DUSK_IF_ELSE(actor_attr::enemy_chase_action_angle(this, &current.angle.y, field_0x6d8, 0x400), cLib_chaseAngleS(&current.angle.y, field_0x6d8, 0x400));
+    cLib_chaseAngleS(&current.angle.y, field_0x6d8, DUSK_IF_ELSE(actor_attr::action_s16_step(0x400, sm_core_action_speed(this)), 0x400));
 }
 
 void daE_SM_c::E_SM_C_Escape() {
     switch (field_0x6b4) {
         case 0:
             E_SM_C_Near_Escape();
-#if !TARGET_PC  // enemy attribute integration
             break;
 
         case 1:
             E_SM_C_Far_Escape();
-#endif
             break;
 
-#if TARGET_PC  // enemy attribute integration
-    case 1:
-        E_SM_C_Far_Escape();
-        break;
-#endif
         case 2:
             E_SM_C_Home_Escape();
             break;
@@ -1361,7 +1225,7 @@ void daE_SM_c::E_SM_C_Escape() {
 void daE_SM_c::E_SM_C_Free() {
     fopAcM_GetPosition(daPy_getPlayerActorClass());
 #if TARGET_PC  // enemy attribute integration
-    cXyz effectScale = sm_size_multiplier(this, scale);
+    cXyz effectScale = actor_attr::enemy_size_multiplier(this, scale);
 #endif
 
     switch (field_0x6b2) {
@@ -1425,11 +1289,11 @@ void daE_SM_c::E_SM_C_Death() {
             s16 sVar1 = current.angle.y - s_TargetAngle;
 
             if (sVar1 > -0x4000 && sVar1 < 0x4000) {
-                speed.y = DUSK_IF_ELSE(actor_attr::enemy_move_step(this, 35.0f), 35.0f);
+                speed.y = 35.0f;
                 speedF = -15.0f;
                 field_0x6b4 = 1;
             } else {
-                speed.y = DUSK_IF_ELSE(actor_attr::enemy_move_step(this, 35.0f), 35.0f);
+                speed.y = 35.0f;
                 speedF = 10.0f;
                 field_0x6b4 = 1;
             }
@@ -1461,7 +1325,7 @@ void daE_SM_c::E_SM_C_Death() {
 
 #if TARGET_PC  // enemy attribute integration
             if (actor_attr::enemy_chase_action_float(this, &field_0x690, 0.1f, 0.005f) != 0) {
-                const u8 disappearSize = static_cast<u8>(10.0f * sm_size_multiplier(this));
+                const u8 disappearSize = static_cast<u8>(10.0f * actor_attr::enemy_size_multiplier(this));
                 fopAcM_createDisappear(this, &current.pos, disappearSize, 0, 23);
 #else
                 if (cLib_chaseF(&field_0x690, 0.1f, 0.005f) != 0) {
@@ -1567,7 +1431,7 @@ void daE_SM_c::C_DamageCheck() {
 
                 if (mCoreAction != CORE_ACTION_FREE) {
 #if TARGET_PC  // enemy attribute integration
-                    cXyz effectScale = sm_size_multiplier(this, scale);
+                    cXyz effectScale = actor_attr::enemy_size_multiplier(this, scale);
                     dComIfGp_particle_set(0x877E, &current.pos, &tevStr, &i_rotation, &effectScale);
                     dComIfGp_particle_set(0x877F, &current.pos, &tevStr, &i_rotation, &effectScale);
                     dComIfGp_particle_set(0x8780, &current.pos, &tevStr, &i_rotation, &effectScale);
@@ -1603,7 +1467,7 @@ void daE_SM_c::C_DamageCheck() {
                     field_0x6b4 = 0;
                     mAction = ACTION_UNK;
 #if TARGET_PC  // enemy attribute integration
-                    cXyz i_scale = sm_size_multiplier(this, 1.5f);
+                    cXyz i_scale = actor_attr::enemy_size_multiplier(this, 1.5f);
 #else
                     cXyz i_scale(1.5f, 1.5f, 1.5f);
 #endif
@@ -1657,7 +1521,7 @@ void daE_SM_c::E_SM_C_Hook() {
         fopAcM_cancelHookCarryNow(this);
         speedF = IREG_F(18);
         speed.set(0.0f, 0.0f, 0.0f);
-        current.pos.y -= DUSK_IF_ELSE(40.0f * sm_size_multiplier(this), 40.0f);
+        current.pos.y -= DUSK_IF_ELSE(40.0f * actor_attr::enemy_size_multiplier(this), 40.0f);
         mCoreAction = CORE_ACTION_FREE;
         field_0x6b2 = 0;
         SetAnm(BCK_SC_LIBERATION, J3DFrameCtrl::EMode_NONE, 1.0f, 3.0f);
@@ -1667,14 +1531,14 @@ void daE_SM_c::E_SM_C_Hook() {
             fopAcM_cancelHookCarryNow(this);
             speedF = IREG_F(18);
             speed.set(0.0f, 0.0f, 0.0f);
-            current.pos.y -= DUSK_IF_ELSE(40.0f * sm_size_multiplier(this), 40.0f);
+            current.pos.y -= DUSK_IF_ELSE(40.0f * actor_attr::enemy_size_multiplier(this), 40.0f);
             mCoreAction = CORE_ACTION_FREE;
             field_0x6b2 = 0;
             SetAnm(BCK_SC_LIBERATION, J3DFrameCtrl::EMode_NONE, 1.0f, 3.0f);
             field_0x6ac = false;
         }
 
-        cXyz sp28(0.0f, DUSK_IF_ELSE((yREG_F(4) + -60.0f) * sm_size_multiplier(this), yREG_F(4) + -60.0f), 0.0f);
+        cXyz sp28(0.0f, DUSK_IF_ELSE((yREG_F(4) + -60.0f) * actor_attr::enemy_size_multiplier(this), yREG_F(4) + -60.0f), 0.0f);
         daPy_getPlayerActorClass()->setHookshotCarryOffset(fopAcM_GetID(this), &sp28);
 
         if (mAnm == BCK_SC_F_SHOCK && mpModelMorf->isStop()) {
@@ -1929,7 +1793,7 @@ void daE_SM_c::CoreAction() {
 
     if (sVar1 == 0) {
 #if TARGET_PC  // enemy attribute integration
-        const f32 sizeMultiplier = sm_size_multiplier(this);
+        const f32 sizeMultiplier = actor_attr::enemy_size_multiplier(this);
         current.pos.set(field_0x990.x, field_0x990.y + (80.0f * sizeMultiplier), field_0x990.z);
         current.pos.y += (std::abs(cM_ssin(field_0x6be)) * -25.0f) * sizeMultiplier;
 #else
@@ -1939,7 +1803,12 @@ void daE_SM_c::CoreAction() {
     } else {
         if (sVar1 == 1) {
 #if TARGET_PC  // enemy attribute integration
-            const bool backgroundCorrected = sm_core_pos_move_f(this, field_0xe50.GetCCMoveP());
+            if (sm_core_hop(this)) {
+                const f32 hopSize = actor_attr::enemy_size_multiplier(this);
+                actor_attr::pos_move_resolved_f(this, speedF * hopSize, gravity * hopSize, maxFallSpeed * hopSize, field_0xe50.GetCCMoveP());
+            } else {
+                actor_attr::enemy_action_pos_move_f(this, field_0xe50.GetCCMoveP());
+            }
 #else
             fopAcM_posMoveF(this, field_0xe50.GetCCMoveP());
 #endif
@@ -1949,20 +1818,14 @@ void daE_SM_c::CoreAction() {
                     gravity = -9.0f;
                 } else {
                     gravity = 0.0f;
-                    current.pos.y += speed.y;
+                    current.pos.y += DUSK_IF_ELSE(actor_attr::action_step(speed.y, sm_core_action_speed(this)), speed.y);
                 }
             } else {
                 gravity = 0.0f;
             }
 
-#if TARGET_PC  // enemy attribute integration
-            if (!backgroundCorrected) {
-
-#endif
             field_0xa60.CrrPos(dComIfG_Bgsp());
 #if TARGET_PC  // enemy attribute integration
-            }
-
             // Apply the safety floor only after all vanilla movement and
             // background correction. This cannot alter the demo's starting
             // X/Z placement or influence its initial ground correction.
@@ -1981,13 +1844,16 @@ void daE_SM_c::CoreAction() {
         }
     }
 
-    DUSK_IF_ELSE(actor_attr::enemy_add_action_angle(this, &shape_angle.y, current.angle.y, 5, 0x1000), cLib_addCalcAngleS2(&shape_angle.y, current.angle.y, 5, 0x1000));
+#if TARGET_PC  // enemy attribute integration
+    const actor_attr::ActionAngleParams params = actor_attr::action_angle_params(5, 0x1000, sm_core_action_speed(this));
+#endif
+    cLib_addCalcAngleS2(&shape_angle.y, current.angle.y, DUSK_IF_ELSE(params.divisor, 5), DUSK_IF_ELSE(params.maximumStep, 0x1000));
 }
 
 void daE_SM_c::ArrowOn() {
     cXyz sp68, sp74;
 #if TARGET_PC  // enemy attribute integration
-    const f32 bubbleSizeMultiplier = sm_size_multiplier(this);
+    const f32 bubbleSizeMultiplier = actor_attr::enemy_size_multiplier(this);
 #endif
     f32 fVar1 = 1.0f - field_0x6e4 * 0.2f;
     f32 fVar2 = field_0x6f0 / field_0x6e0;
@@ -2034,6 +1900,9 @@ void daE_SM_c::ArrowOn() {
 }
 
 int daE_SM_c::Execute() {
+#if TARGET_PC  // enemy attribute integration
+    const bool coreHopping = sm_core_hop(this);
+#endif
     field_0x99c = field_0x990;
     s_TargetAngle = fopAcM_searchPlayerAngleY(this);
     s_Dis = fopAcM_searchPlayerDistanceXZ(this);
@@ -2061,7 +1930,11 @@ int daE_SM_c::Execute() {
     Action();
     CoreAction();
 #if TARGET_PC  // enemy attribute integration
-    cXyz i_effSize = sm_size_multiplier(this, 1.0f);
+    if (coreHopping != sm_core_hop(this)) {
+        mpModelMorf->setPlaySpeed(sm_core_action_speed(this));
+    }
+
+    cXyz i_effSize = actor_attr::enemy_size_multiplier(this, 1.0f);
 #else
     cXyz i_effSize(1.0f, 1.0f, 1.0f);
 #endif
@@ -2072,7 +1945,7 @@ int daE_SM_c::Execute() {
     CoCoreSet();
 
 #if TARGET_PC  // enemy attribute integration
-    const f32 coreSizeMultiplier = sm_size_multiplier(this);
+    const f32 coreSizeMultiplier = actor_attr::enemy_size_multiplier(this);
 
 #endif
     if (mCoreAction == CORE_ACTION_FREE) {
@@ -2100,7 +1973,7 @@ void daE_SM_c::setSmBaseMtx() {
     mDoMtx_stack_c::transS(field_0x990);
     mDoMtx_stack_c::YrotM(field_0x9b0.y);
 #if TARGET_PC  // enemy attribute integration
-    const f32 bubbleSizeMultiplier = sm_size_multiplier(this);
+    const f32 bubbleSizeMultiplier = actor_attr::enemy_size_multiplier(this);
     mDoMtx_stack_c::scaleM(bubbleSizeMultiplier, bubbleSizeMultiplier, bubbleSizeMultiplier);
 #endif
 
@@ -2144,7 +2017,7 @@ void daE_SM_c::setSmBaseMtx() {
 void daE_SM_c::setBaseMtx() {
 #if TARGET_PC  // enemy attribute integration
 
-    const f32 coreScale = l_HIO.core_size * sm_size_multiplier(this);
+    const f32 coreScale = l_HIO.core_size * actor_attr::enemy_size_multiplier(this);
 #endif
     mDoMtx_stack_c::transS(current.pos);
     mDoMtx_stack_c::YrotM(shape_angle.y);
@@ -2163,7 +2036,7 @@ void daE_SM_c::CoCoreSet() {
     cXyz sp18;
     sp18 = current.pos;
 #if TARGET_PC  // enemy attribute integration
-    const f32 coreSizeMultiplier = sm_size_multiplier(this);
+    const f32 coreSizeMultiplier = actor_attr::enemy_size_multiplier(this);
 #endif
 
     if (mCoreAction == CORE_ACTION_DEATH) {
@@ -2189,7 +2062,7 @@ void daE_SM_c::CoCoreSet() {
 void daE_SM_c::CoSmSet() {
 #if TARGET_PC  // enemy attribute integration
 
-    const f32 bubbleSizeMultiplier = sm_size_multiplier(this);
+    const f32 bubbleSizeMultiplier = actor_attr::enemy_size_multiplier(this);
     cXyz sp18(0.0f, (field_0x6f0 * 80.0f) * bubbleSizeMultiplier, 0.0f);
 #else
     cXyz sp18(0.0f, field_0x6f0 * 80.0f, 0.0f);
@@ -2379,7 +2252,7 @@ cPhs_Step daE_SM_c::Create() {
         fopAcM_SetMtx(this, mpBubbleModel->getBaseTRMtx());
         fopAcM_SetMtx(this, mpModelMorf->getModel()->getBaseTRMtx());
 #if TARGET_PC  // enemy attribute integration
-        const f32 cullSizeMultiplier = sm_size_multiplier(this);
+        const f32 cullSizeMultiplier = actor_attr::enemy_size_multiplier(this);
         fopAcM_SetMin(this, -800.0f * cullSizeMultiplier, -200.0f * cullSizeMultiplier, -800.0f * cullSizeMultiplier);
         fopAcM_SetMax(this, 800.0f * cullSizeMultiplier, 500.0f * cullSizeMultiplier, 800.0f * cullSizeMultiplier);
 #else
@@ -2396,14 +2269,16 @@ cPhs_Step daE_SM_c::Create() {
         mSound.setEnemyName("E_SM");
 
 #if TARGET_PC  // enemy attribute integration
-        const f32 bubbleSizeMultiplier = sm_size_multiplier(this);
+        const f32 bubbleSizeMultiplier = actor_attr::enemy_size_multiplier(this);
         field_0xc38.SetWall((yREG_F(0) + 40.0f) * bubbleSizeMultiplier, (yREG_F(1) + 120.0f + (TREG_F(11) + 30.0f) * field_0x6f0) * bubbleSizeMultiplier);
 #else
         field_0xc38.SetWall(yREG_F(0) + 40.0f, yREG_F(1) + 120.0f + (TREG_F(11) + 30.0f) * field_0x6f0);
 #endif
         field_0xc78.Set(&field_0x990, &field_0x99c, this, 1, &field_0xc38, &field_0x9b8, NULL, NULL);
+        // Check below the raised wall circle when fast gravity crosses the floor. This stops bobbing at high speeds combined with bigger sizes.
+        IF_DUSK(field_0xc78.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
-        const f32 coreSizeMultiplier = sm_size_multiplier(this);
+        const f32 coreSizeMultiplier = actor_attr::enemy_size_multiplier(this);
         field_0xa20.SetWall(100.0f * coreSizeMultiplier, 50.0f * coreSizeMultiplier);
 #else
         field_0xa20.SetWall(100.0f, 50.0f);
@@ -2411,6 +2286,7 @@ cPhs_Step daE_SM_c::Create() {
 
         field_0xa60.Set(&current.pos, &old.pos, this, 1, &field_0xa20, &speed, NULL, NULL);
         field_0xa60.OnLineCheck();
+        IF_DUSK(field_0xa60.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
         field_0xa60.SetGndThinCellingOff();
         field_0xc78.SetGndThinCellingOff();
 
