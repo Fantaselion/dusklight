@@ -2880,7 +2880,7 @@ void daB_ZANT_c::executeIceJump() {
         }
         shape_angle.y = current.angle.y;
 
-        if (mModeTimer == 0 && sp44.absXZ(current.pos) < 550.0f) {
+        if (mModeTimer == 0 && sp44.absXZ(current.pos) < DUSK_IF_ELSE(actor_attr::enemy_size_value(this, 550.0f), 550.0f)) {
             mMode = 5;
             gravity = -5.0f;
             speed.y = 0.0f;
@@ -6052,6 +6052,7 @@ int daB_ZANT_c::create() {
         fopAcM_SetMax(this, 200.0f, 200.0f, 200.0f);
 
         mAcch.Set(fopAcM_GetPosition_p(this), fopAcM_GetOldPosition_p(this), this, 1, &mAcchCir, fopAcM_GetSpeed_p(this), NULL, NULL);
+        IF_DUSK(mAcch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
         mAcchCir.SetWall(actor_attr::enemy_size_value(this, 100.0f), actor_attr::enemy_size_value(this, 100.0f));
 #else
