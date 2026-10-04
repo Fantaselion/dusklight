@@ -3761,10 +3761,7 @@ void daB_DR_c::executeBullet() {
             field_0x730 = 100.0f;
         }
 
-#if TARGET_PC  // enemy attribute integration
-        const f32 breathHitRadius = actor_attr::enemy_size_value(this, field_0x730);
-
-#endif
+        IF_DUSK(const f32 breathHitRadius = actor_attr::enemy_size_value(this, field_0x730) * (actor_attr::enemy_size_multiplier(this) > 1.0f ? 0.9f : 1.0f);)
         mBreathAtCc.SetC(current.pos);
 #if TARGET_PC  // enemy attribute integration
         if (actor_attr::enemy_action_time_speed(this) > 1.0f) {
