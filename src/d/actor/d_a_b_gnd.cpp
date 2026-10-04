@@ -5091,6 +5091,7 @@ static int daB_GND_Create(fopAc_ac_c* a_this) {
         fopAcM_SetMax(a_this, 400.0f, 200.0f, 400.0f);
 
         i_this->mAcch.Set(fopAcM_GetPosition_p(a_this), fopAcM_GetOldPosition_p(a_this), a_this, 1, &i_this->mAcchCir, fopAcM_GetSpeed_p(a_this), NULL, NULL);
+        IF_DUSK(i_this->mAcch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
 #if TARGET_PC  // enemy attribute integration
         i_this->mAcchCir.SetWall(actor_attr::enemy_size_value(i_this, 50.0f), actor_attr::enemy_size_value(i_this, 150.0f));
 #else
