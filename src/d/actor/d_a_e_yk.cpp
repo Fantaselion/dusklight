@@ -755,7 +755,7 @@ static void e_yk_attack(e_yk_class* i_this) {
         break;
     case 1:
         i_this->mPathPntPos = player->current.pos;
-        i_this->mPathPntPos.y += DUSK_IF_ELSE(120.0f * actor_attr::enemy_size_multiplier(i_this), 120.0f);
+        i_this->mPathPntPos.y += DUSK_IF_ELSE(120.0f - (20.0f * (actor_attr::enemy_size_multiplier(i_this) - 1.0f)), 120.0f);
         i_this->mMoveInterpolation = 2.0f;
 
         if (i_this->mActionTimers[1]  == 0) {

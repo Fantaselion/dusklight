@@ -2725,6 +2725,9 @@ void daE_VA_c::executeOpaciChase() {
     daPy_py_c* player = daPy_getPlayerActorClass();
     s16 angleY_to_player = fopAcM_searchPlayerAngleY(this);
     s16 angle_to_home = cLib_targetAngleY(&home.pos, &current.pos);
+#if TARGET_PC  // enemy attribute integration
+    const bool needsLanding = actor_attr::enemy_action_time_speed(this) != 1.0f || actor_attr::enemy_size_multiplier(this) > 2.0f;
+#endif
 
     switch (mMode) {
     case 0:
@@ -2899,11 +2902,19 @@ void daE_VA_c::executeOpaciChase() {
         cLib_addCalcAngleS(&current.angle.y, angleY_to_player, 8, 0x800, 0x80);
 #endif
 
-        if (DUSK_IF_ELSE(actor_attr::enemy_chase_action_float(this, &speedF, 0.0f, 3.0f), cLib_chaseF(&speedF, 0.0f, 3.0f))) {
+        if (DUSK_IF_ELSE(actor_attr::enemy_chase_action_float(this, &speedF, 0.0f, 3.0f) && (!needsLanding || mAcch.ChkGroundHit()), cLib_chaseF(&speedF, 0.0f, 3.0f))) {
             setActionMode(ACTION_OPACI_ATTACK_e, 0);
         }
         break;
     }
+#if TARGET_PC  // enemy attribute integration
+    // Finish descending when circling ends; approach modes no longer update the vertical bob.
+    if (needsLanding && (mMode == 12 || mMode == 13) && field_0x1324 != 2) {
+        speed.y = std::min(speed.y, 0.0f);
+        gravity = -5.0f;
+        field_0x1324 = 2;
+    }
+#endif
 }
 
 void daE_VA_c::executeOpaciAttack() {
@@ -3652,35 +3663,29 @@ void daE_VA_c::action() {
 #if TARGET_PC  // enemy attribute integration
     actor_attr::enemy_action_pos_move_f(this, mBodyCcStts.GetCCMoveP());
 
-    // During the opaque chase's room-circling phase (modes 10/11), enlarged
-    // Death Sword instances can have such a large Acch wall radius that wall
-    // correction pins them against the arena boundary. Keep the normal Acch
-    // pass so ground/vertical correction and collision state are still updated,
-    // but discard only its horizontal wall pushback while circling.
-    //
-    // Limit this behavior to enlarged instances so vanilla-size behavior stays
-    // unchanged. Mode 12 is deliberately excluded: that is the transition from
-    // circling the room to approaching Link for the attack.
-    const bool ignoreCircleWall = mAction == ACTION_OPACI_CHASE_e && (mMode == 10 || mMode == 11) && actor_attr::enemy_size_multiplier(this) > 1.0f;
-
-    if (ignoreCircleWall) {
-        const f32 circleMoveX = current.pos.x;
-        const f32 circleMoveZ = current.pos.z;
+    // Let big Death Sword instances ignore walls and ceilings in every state, otherwise he would get stuck often.
+    // Restore the flags after correction so a size reroll keeps normal collision.
+    const u32 collisionNoneMask = dBgS_Acch::FLAG_WALL_NONE | dBgS_Acch::FLAG_ROOF_NONE | dBgS_Acch::FLAG_LINE_CHECK_NONE;
+    const u32 savedCollisionNone = mAcch.m_flags & collisionNoneMask;
+    const f32 savedGroundCheckOffset = mAcch.m_gnd_chk_offset;
+    if (actor_attr::enemy_size_multiplier(this) > 2.0f && mAlphaType == 2) {
+        mAcch.SetWallNone();
+        mAcch.SetRoofNone();
+        mAcch.OnLineCheckNone();
+        mAcch.ClrWallHit();
+        mAcch.ClrRoofHit();
+        mAcchCir.ClrWallHit();
+        // The opaque fight uses arena floor Y = 0. Probe from its vanilla floor band
+        // so overhead surfaces cannot become the ground after passing through them.
+        mAcch.SetGroundCheckOffset(savedGroundCheckOffset - current.pos.y);
+    }
 #else
     fopAcM_posMoveF(this, mBodyCcStts.GetCCMoveP());
 #endif
     mAcch.CrrPos(dComIfG_Bgsp());
 #if TARGET_PC  // enemy attribute integration
-
-        // Preserve the movement path chosen by executeOpaciChase(), ignoring
-        // only X/Z correction caused by the arena walls. Y correction remains
-        // whatever Acch calculated so ground contact still behaves normally.
-        current.pos.x = circleMoveX;
-        current.pos.z = circleMoveZ;
-        mAcchCir.ClrWallHit();
-    } else {
-        mAcch.CrrPos(dComIfG_Bgsp());
-    }
+    mAcch.m_flags = (mAcch.m_flags & ~collisionNoneMask) | savedCollisionNone;
+    mAcch.SetGroundCheckOffset(savedGroundCheckOffset);
 #endif
 
     switch (mKankyoColType) {

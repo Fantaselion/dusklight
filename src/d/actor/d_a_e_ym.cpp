@@ -3922,6 +3922,7 @@ int daE_YM_c::create() {
 
         mAcch.Set(fopAcM_GetPosition_p(this), fopAcM_GetOldPosition_p(this), this, 1, &mAcchCir,
                   fopAcM_GetSpeed_p(this), NULL, NULL);
+        IF_DUSK(mAcch.m_flags |= dBgS_Acch::FLAG_LINE_DOWN;)
         mAcch.OnLineCheck();
 #if TARGET_PC  // enemy attribute integration
         mAcchCir.SetWall((30.0f) * actor_attr::enemy_size_multiplier(this), (60.0f) * actor_attr::enemy_size_multiplier(this));

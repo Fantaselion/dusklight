@@ -1942,7 +1942,24 @@ void daE_WW_c::eWW_posMoveF() {
         speedF *= plane.GetNP()->y;
     }
 
+#if TARGET_PC  // enemy attribute integration
+    const f32 actionSpeed = actor_attr::enemy_action_time_speed(this);
+    if (field_0x75b == 2 && actionSpeed != 1.0f) {
+        // Advance the attack leap's vanilla arc and forward slowdown in action time.
+        const f32 startSpeedY = speed.y;
+        const f32 forwardStep = speedF > 0.0f ? std::max(0.0f, speedF - 0.5f * (actionSpeed - 1.0f)) : speedF;
+        const f32 physicalSpeedF = actor_attr::enemy_move_step(this, forwardStep);
+        speed.x = physicalSpeedF * cM_ssin(current.angle.y);
+        speed.z = physicalSpeedF * cM_scos(current.angle.y);
+        speed.y = std::max((startSpeedY + 0.5f * gravity * (actionSpeed + 1.0f)) * actionSpeed, maxFallSpeed * actionSpeed);
+        fopAcM_posMove(this, mCcStts.GetCCMoveP());
+        speed.y = std::max(startSpeedY + gravity * actionSpeed, maxFallSpeed);
+    } else {
+        fopAcM_posMoveF(this,mCcStts.GetCCMoveP());
+    }
+#else
     fopAcM_posMoveF(this,mCcStts.GetCCMoveP());
+#endif
     speedF = temp_f31;
 }
 

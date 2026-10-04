@@ -2115,6 +2115,7 @@ void daE_ZH_c::action() {
             mBgc.SetRoofCrrHeight(actor_attr::enemy_size_value(this, BREG_F(2) + 100.0f));
             mAcchCir.SetWall(actor_attr::enemy_size_value(this, 100.0f), actor_attr::enemy_size_value(this, BREG_F(1) + 150.0f));
             mBgc.SetGroundUpY(actor_attr::enemy_size_value(this, field_0x760 + BREG_F(0)));
+            mBgc.SetGroundCheckOffset(mActionMode == ACTION_EXECUTE_CATCH_MOVE && (mMoveMode == 2 || mMoveMode == 3) ? actor_attr::enemy_size_value(this, 60.0f) : 60.0f);
 #else
             mBgc.SetRoofCrrHeight(BREG_F(2) + 100.0f);
             mAcchCir.SetWall(100.0f, BREG_F(1) + 150.0f);
