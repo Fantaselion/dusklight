@@ -225,8 +225,13 @@ void dGameover_c::playerAnmWait_proc() {
 }
 
 void dGameover_c::dispFadeOut_init() {
+#if TARGET_PC
+    mTimer = dusk::getSettings().game.fasterDeathSeq ? 5 : 30;
+    mDoGph_gInf_c::startFadeOut(dusk::getSettings().game.fasterDeathSeq ? 5 : 15);
+#else
     mTimer = 30;
     mDoGph_gInf_c::startFadeOut(15);
+#endif
 }
 
 void dGameover_c::dispFadeOut_proc() {
@@ -238,8 +243,13 @@ void dGameover_c::dispFadeOut_proc() {
 }
 
 void dGameover_c::dispWait_init() {
+#if TARGET_PC
+    mTimer = dusk::getSettings().game.fasterDeathSeq ? 0 : 90;
+    mDoGph_gInf_c::startFadeOut(dusk::getSettings().game.fasterDeathSeq ? 10 : 30);
+#else
     mTimer = 90;
     mDoGph_gInf_c::startFadeIn(30);
+#endif
 }
 
 void dGameover_c::dispWait_proc() {
@@ -264,7 +274,11 @@ void dGameover_c::demoFadeIn_proc() {
 }
 
 void dGameover_c::demoFadeOut_init() {
+#if TARGET_PC
+    dusk::getSettings().game.fasterDeathSeq ? 0 : 30;
+#else
     mTimer = 30;
+#endif
 }
 
 void dGameover_c::demoFadeOut_proc() {
