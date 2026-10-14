@@ -353,7 +353,7 @@ void dMsgScrnExplain_c::move() {
 void dMsgScrnExplain_c::presentAnims() {
     if (mStatus == STATUS_OPEN_e || mStatus == STATUS_CLOSE_e) {
 #if TARGET_PC
-        dusk::vdt::advance_toward_frame(field_0x5a, mStatus == STATUS_OPEN_e ? 5.0f : 0.0f, dusk::getSettings().game.fasterDeathSeq ? 5.0f : 1.0f);
+        dusk::vdt::advance_toward_frame(field_0x5a, mStatus == STATUS_OPEN_e ? 5.0f : 0.0f, DUSK_IF_ELSE(dusk::getSettings().game.fasterDeathSeq ? 5.0f : 1.0f, 1.0f));
 #else
         dusk::vdt::advance_toward_frame(field_0x5a, mStatus == STATUS_OPEN_e ? 5.0f : 0.0f, 1.0f);
 #endif

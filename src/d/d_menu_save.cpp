@@ -1657,11 +1657,7 @@ void dMenu_save_c::retryQuestion1() {
 void dMenu_save_c::retryQuestion2() {
     if (YesNoSelect()) {
         if (mYesNoCursor == CURSOR_YES) {
-#if TARGET_PC
-            mWaitTimer = dusk::getSettings().game.fasterDeathSeq ? 0 : 15;
-#else
-            mWaitTimer = 15;
-#endif
+            mWaitTimer = DUSK_IF_ELSE(dusk::getSettings().game.fasterDeathSeq ? 0 : 15, 15);
             mMenuProc = PROC_GAME_CONTINUE3;
         } else {
             field_0x2190 = 1;
@@ -1782,7 +1778,7 @@ void dMenu_save_c::msgTxtSet(u16 msgID, bool param_1) {
         } else if (field_0x2190 == 1) {
             check = mpScrnExplain->openExplain(msgID, 1, mYesNoCursor == CURSOR_NO, 0xFF, param_1);
 #if TARGET_PC
-            mpScrnExplain->setKeyWaitTimer(dusk::getSettings().game.fasterDeathSeq ? 0 : 30);
+            mpScrnExplain->setKeyWaitTimer(DUSK_IF_ELSE(dusk::getSettings().game.fasterDeathSeq ? 0 : 30, 30));
 #else
             mpScrnExplain->setKeyWaitTimer(30);
 #endif
